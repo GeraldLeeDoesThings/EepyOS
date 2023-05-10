@@ -2,9 +2,14 @@
 TRIPLE=riscv64-none-elf
 OBJCOPY:=$(TRIPLE)-objcopy
 
-.PHONY: all kernel.img kernel.elf
+.PHONY: all publish kernel kernel.img kernel.elf
 
-all: kernel.img
+all: publish
+
+publish: kernel.img
+	cp kernel.img /srv/tftp/
+
+kernel: kernel.img
 
 clean:
 	cargo clean
