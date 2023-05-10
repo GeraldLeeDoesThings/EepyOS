@@ -1,0 +1,58 @@
+use crate::io::{
+    Readable,
+    Writable
+};
+
+pub const UART0_BASE: u64 = 0x0010000000;
+pub const UART1_BASE: u64 = 0x0010010000;
+pub const UART2_BASE: u64 = 0x0010020000;
+
+const RBR_OFFSET: isize = 0x00;
+const THR_OFFSET: isize = 0x00;
+const LSR_OFFSET: isize = 0x14;
+
+const LSR_DR_BITMASK: u64   = 0x1;
+const LSR_THRE_BITMASK: u64 = 0x1 << 5;
+
+// There are more fields that we don't really care about right now
+
+pub struct UartHandler {
+    rbr: *const u64,
+    thr: *mut u64,
+    lsr: *const u64,
+}
+
+impl Readable<u8> for UartHandler {
+    fn read(&self) -> Option<u8> {
+        unsafe {
+            let has_data = self.lsr.read_volatile() & LSR_DR_BITMASK;
+            if has_data == 0 { return None; }
+            return Some((self.rbr.read_volatile() * has_data & 0xFF) as u8);
+        }
+    }
+}
+
+impl Writable<u8> for UartHandler {
+    fn write(&self, v: u8) -> Result<(), ()> {
+        unsafe {
+            let has_space = self.lsr.read_volatile() & LSR_THRE_BITMASK;
+            if has_space == 0 { return Err(()); }
+            self.thr.write(v as u64);
+            return Ok(());
+        }
+    }
+}
+
+impl UartHandler {
+    pub fn new(base: u64) -> UartHandler {
+        let base_ptr = base as *const u8;
+        unsafe {
+            return UartHandler { 
+                rbr: base_ptr.offset(RBR_OFFSET) as *const u64,
+                thr: base_ptr.offset(THR_OFFSET) as *mut u64,
+                lsr: base_ptr.offset(LSR_OFFSET) as *const u64,
+            };
+        }
+    }
+}
+
