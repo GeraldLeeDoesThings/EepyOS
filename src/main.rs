@@ -4,16 +4,19 @@
 mod io;
 mod uart;
 
-use core::arch::asm;
+use core::arch::{asm, global_asm};
 use core::panic::PanicInfo;
 use core::unreachable;
-
 use io::Writable;
+
+global_asm!(include_str!("boot.S"));
 
 static mut BOOTLOADER_RETURN_ADDRESS: i64 = 0;
 
+
 #[no_mangle]
-fn _start() {
+#[allow(dead_code)]
+extern "C" fn kmain() -> ! {
     unsafe {
         asm!(
             "mv {0}, ra",
@@ -27,8 +30,10 @@ fn _start() {
             Ok(()) => spam = b'g',
             Err(()) => spam = b'b',
         }
+        println!("Linebreak {}!", spam);
     }
 }
+
 
 #[no_mangle]
 #[panic_handler]

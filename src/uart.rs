@@ -1,11 +1,10 @@
+use core::fmt::Write;
 use crate::io::{
     Readable,
     Writable
 };
 
-pub const UART0_BASE: u64 = 0x0010000000;
-pub const UART1_BASE: u64 = 0x0010010000;
-pub const UART2_BASE: u64 = 0x0010020000;
+pub const UART0_BASE: u64 = 0x00_1000_0000;
 
 const RBR_OFFSET: isize = 0x00;
 const THR_OFFSET: isize = 0x00;
@@ -15,6 +14,7 @@ const LSR_DR_BITMASK: u64   = 0x1;
 const LSR_THRE_BITMASK: u64 = 0x1 << 5;
 
 // There are more fields that we don't really care about right now
+
 
 pub struct UartHandler {
     rbr: *const u64,
@@ -43,6 +43,18 @@ impl Writable<u8> for UartHandler {
     }
 }
 
+impl Write for UartHandler {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for c in s.bytes() {
+            let mut write_successful = self.write(c);
+            while write_successful.is_err() {
+                write_successful = self.write(c);
+            }
+        }
+        Ok(())
+    }
+}
+
 impl UartHandler {
     pub fn new(base: u64) -> UartHandler {
         let base_ptr = base as *const u8;
@@ -54,5 +66,30 @@ impl UartHandler {
             };
         }
     }
+}
+
+
+#[macro_export]
+macro_rules! print {
+    ($($args:tt)+) => ({
+        use core::fmt::Write;
+        use crate::uart::{UART0_BASE, UartHandler};
+        let mut uart_out = UartHandler::new(UART0_BASE);
+        let _ = write!(&mut uart_out, $($args)+);
+    });
+}
+
+
+#[macro_export]
+macro_rules! println {
+    () => ({
+        print!("\r\n")
+    });
+    ($fmt:expr) => ({
+        print!(concat!($fmt, "\r\n"))
+    });
+    ($fmt:expr, $($args:tt)+) => ({
+        print!(concat!($fmt, "\r\n"), $($args)+)
+    });
 }
 
