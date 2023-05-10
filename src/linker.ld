@@ -1,7 +1,7 @@
 ENTRY(_start)
 
 MEMORY {
-        ram (wxa) : ORIGIN = 0x80000000, LENGTH = 4000M
+        ram (wxa) : ORIGIN = 0x82000000, LENGTH = 190M
 }
 
 SECTIONS {
