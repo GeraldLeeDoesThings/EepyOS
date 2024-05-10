@@ -9,6 +9,8 @@ use core::panic::PanicInfo;
 use core::unreachable;
 use io::Writable;
 
+use crate::io::Readable;
+
 global_asm!(include_str!("boot.S"));
 
 static mut BOOTLOADER_RETURN_ADDRESS: i64 = 0;
@@ -24,13 +26,19 @@ extern "C" fn kmain() -> ! {
         );
     }
     let console = uart::UartHandler::new(uart::UART0_BASE);
-    let mut spam = b'g';
+    println!("Welcome to EepyOS!");
     loop {
-        match console.write(spam) {
-            Ok(()) => spam = b'g',
-            Err(()) => spam = b'b',
+        if let Some(inp) = console.read() {
+            match console.write(inp) {
+                Ok(()) => (),
+                Err(()) => {
+                    let mut rval = console.read();
+                    while rval.is_some() {
+                        rval = console.read();
+                    }
+                },
+            }
         }
-        println!("Linebreak {}!", spam);
     }
 }
 

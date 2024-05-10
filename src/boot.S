@@ -2,9 +2,8 @@
 .section ".text.boot"
 .global _start
 _start:
-        // Make sure we boot with core 0
-        csrr t0, mhartid
-        bne t0, zero, wait_for_boot
+        // Save hart id, stored in a0
+        mv a2, a0
 
         // Zero out bss
         la a0, _bss_start
@@ -12,15 +11,18 @@ _start:
         jal clear_bss
 
         // Disable interrupts
-        csrw mie, zero
+        csrw sie, zero
 
+        mv a0, a2
+        la sp, _stack_start
+        
         j kmain
         j wait_for_boot
 
 clear_bss:
         sd zero, (a0)
         addi a0, a0, 8
-        bne a0, a1, clear_bss
+        bltu a0, a1, clear_bss
         ret
 
 wait_for_boot:

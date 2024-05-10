@@ -1,7 +1,7 @@
 ENTRY(_start)
 
 MEMORY {
-        ram (wxa) : ORIGIN = 0x82000000, LENGTH = 190M
+        ram (rwx) : ORIGIN = 0x42000000, LENGTH = 170M
 }
 
 SECTIONS {
@@ -37,7 +37,7 @@ SECTIONS {
 
         PROVIDE(_ram_start = ORIGIN(ram));
         PROVIDE(_stack_start = _bss_end);
-        PROVIDE(_stack_end = _stack_start + 0x40000);
+        PROVIDE(_stack_end = _stack_start + 0x4000);
         PROVIDE(_ram_end = _ram_start + LENGTH(ram));
 
         PROVIDE(_heap_start = _stack_end);
