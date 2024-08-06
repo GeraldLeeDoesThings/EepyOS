@@ -1,8 +1,5 @@
+use crate::io::{Readable, Writable};
 use core::fmt::Write;
-use crate::io::{
-    Readable,
-    Writable
-};
 
 // TODO: Don't hard code this
 pub const UART0_BASE: u64 = 0x1000_0000;
@@ -13,11 +10,10 @@ const THR_OFFSET: isize = 0x00;
 const LCR_OFFSET: isize = 0x0C;
 const LSR_OFFSET: isize = 0x14;
 
-const LSR_DR_BITMASK: u8   = 0x1;
+const LSR_DR_BITMASK: u8 = 0x1;
 const LSR_THRE_BITMASK: u8 = 0x1 << 5;
 
 // There are more fields that we don't really care about right now
-
 
 pub struct UartHandler {
     rbr: *const u8,
@@ -30,7 +26,9 @@ impl Readable<u8> for UartHandler {
     fn read(&self) -> Option<u8> {
         unsafe {
             let has_data = self.lsr.read_volatile() & LSR_DR_BITMASK;
-            if has_data == 0 { return None; }
+            if has_data == 0 {
+                return None;
+            }
             Some(self.rbr.read_volatile())
         }
     }
@@ -40,7 +38,9 @@ impl Writable<u8> for UartHandler {
     fn write(&self, v: u8) -> Result<(), ()> {
         unsafe {
             let has_space = self.lsr.read_volatile() & LSR_THRE_BITMASK;
-            if has_space == 0 { return Err(()); }
+            if has_space == 0 {
+                return Err(());
+            }
             self.thr.write_volatile(v);
             Ok(())
         }
@@ -63,7 +63,7 @@ impl UartHandler {
     pub fn new(base: u64) -> UartHandler {
         let base_ptr = base as *const u8;
         unsafe {
-            let handler = UartHandler { 
+            let handler = UartHandler {
                 rbr: base_ptr.byte_offset(RBR_OFFSET) as *const u8,
                 thr: base_ptr.byte_offset(THR_OFFSET) as *mut u8,
                 lcr: base_ptr.byte_offset(LCR_OFFSET) as *mut u8,
@@ -76,7 +76,6 @@ impl UartHandler {
     }
 }
 
-
 #[macro_export]
 macro_rules! print {
     ($($args:tt)+) => ({
@@ -86,7 +85,6 @@ macro_rules! print {
         let _ = write!(&mut uart_out, $($args)+);
     });
 }
-
 
 #[macro_export]
 macro_rules! println {
@@ -100,4 +98,3 @@ macro_rules! println {
         print!(concat!($fmt, "\r\n"), $($args)+)
     });
 }
-
