@@ -13,6 +13,7 @@ thread_context:
 .section ".text"
 
 activate_context:
+    addi sp, sp, -496
     sd ra, 0(sp)
     sd gp, 8(sp)
     sd tp, 16(sp)
@@ -94,6 +95,7 @@ activate_context:
     ld s0, 56(a1)
     ld s1, 64(a1)
     ld a0, 72(a1)
+    
     ld a2, 88(a1)
     ld a3, 96(a1)
     ld a4, 104(a1)
@@ -168,6 +170,7 @@ context_return:
     sd s0, 56(a1)
     sd s1, 64(a1)
     sd a0, 72(a1)
+
     sd a2, 88(a1)
     sd a3, 96(a1)
     sd a4, 104(a1)
@@ -293,6 +296,7 @@ context_return:
     csrr a0, sepc
     csrr a1, scause
 
+    addi sp, sp, 496
     ret
 
 .global activate_context

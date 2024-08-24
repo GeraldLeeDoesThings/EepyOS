@@ -16,6 +16,7 @@ _start:
         mv a0, a2
         la sp, _stack_start
         
+        bnez a0, wait_for_boot
         j kmain
         j wait_for_boot
 

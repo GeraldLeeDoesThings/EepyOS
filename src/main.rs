@@ -5,11 +5,14 @@
 
 mod consts;
 mod context;
+mod debug;
 mod exception;
+mod interrupt;
 mod io;
 mod process;
 mod resource;
 mod sync;
+mod syscall;
 mod thread;
 mod uart;
 
@@ -17,10 +20,12 @@ use consts::MAX_PROCESSES;
 use core::arch::{asm, global_asm};
 use core::panic::PanicInfo;
 use core::unreachable;
-use exception::init_exception_handler;
+use exception::{handle_exception, init_exception_handler};
+use interrupt::{handle_interrupt, IS_INTERRUPT_MASK};
 use io::Writable;
 use process::ProcessControlBlock;
 use resource::ResourceManager;
+use syscall::exit;
 use uart::{UartHandler, UART0_BASE};
 
 use crate::io::Readable;
@@ -33,7 +38,7 @@ static mut PROCESS_TABLE: ResourceManager<Option<ProcessControlBlock>, MAX_PROCE
 
 #[no_mangle]
 #[allow(dead_code)]
-extern "C" fn kmain() -> ! {
+extern "C" fn kmain(hart_id: u64) -> ! {
     unsafe {
         asm!(
             "mv {0}, ra",
@@ -42,10 +47,11 @@ extern "C" fn kmain() -> ! {
     }
     let console = UartHandler::new(UART0_BASE);
     println!("Welcome to EepyOS!");
+    println!("Hello from core: {}", hart_id);
 
     unsafe {
         init_exception_handler();
-        let maybe_test_process = ProcessControlBlock::new(test, 0, 10, 0x6000_0000);
+        let maybe_test_process = ProcessControlBlock::new(test, 0, 10, 0x5000_0000);
 
         match maybe_test_process {
             Ok(pcb) => {
@@ -58,14 +64,20 @@ extern "C" fn kmain() -> ! {
             Err(_) => println!("Failed to spawn a process!"),
         }
 
-        // PROCESS_TABLE[0] = Some();
-        // let r = PROCESS_TABLE[0].unwrap().threads[0].unwrap().activate();
+        let _ = PROCESS_TABLE
+            .claim_first(Some(
+                ProcessControlBlock::new(test2, 1, 9, 0x5000_0000).unwrap(),
+            ))
+            .expect("Failed to spawn second process");
     }
 
     loop {
         unsafe {
             let scheduled_thread = match PROCESS_TABLE.choose_next_thread() {
-                None => continue,
+                None => {
+                    println!("Out of threads to schedule, starting echo loop...");
+                    break;
+                }
                 Some(chosen_thread) => chosen_thread,
             };
 
@@ -73,13 +85,19 @@ extern "C" fn kmain() -> ! {
                 Ok(result) => result,
                 Err(msg) => {
                     println!("Error trying to run thread: {}", msg);
-                    continue;
+                    break;
                 }
             };
 
-            // TODO: Handle the result
+            if run_result.cause & IS_INTERRUPT_MASK > 0 {
+                handle_interrupt(&run_result, &scheduled_thread);
+            } else {
+                handle_exception(&run_result, &scheduled_thread);
+            }
         }
+    }
 
+    loop {
         if let Some(inp) = console.read() {
             match console.write(inp) {
                 Ok(()) => (),
@@ -97,7 +115,13 @@ extern "C" fn kmain() -> ! {
 extern "C" fn test() -> i64 {
     // TODO: Move elsewhere
     println!("Hello world!");
-    return 0;
+    exit();
+}
+
+extern "C" fn test2() -> i64 {
+    // TODO: Move elsewhere
+    println!("Hello from another process!");
+    exit();
 }
 
 #[no_mangle]

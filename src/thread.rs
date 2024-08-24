@@ -1,6 +1,8 @@
 use crate::{
+    println,
     resource::Resource,
     sync::{Mutex, MutexGuard, MutexLockError},
+    syscall::exit,
 };
 use core::{error::Error, fmt::Display, ptr::addr_of};
 
@@ -154,6 +156,7 @@ impl<'a> ThreadControlBlock {
             handle_lock: Mutex::new(()),
         };
         tcb.registers.sp = stack_base;
+        tcb.registers.ra = exit as u64;
         tcb
     }
 
@@ -213,6 +216,14 @@ impl<'a> ThreadControlBlock {
     pub fn get_need(&self) -> u32 {
         self.need
     }
+
+    fn kill(&mut self) {
+        println!("Killing thread with id {}", self.id);
+        match self.state {
+            ThreadState::Running => panic!("Tried to kill running thread with id: {}", self.id),
+            _ => self.state = ThreadState::Zombie,
+        }
+    }
 }
 
 impl<'a> ThreadHandle<'a> {
@@ -234,6 +245,13 @@ impl<'a> ThreadHandle<'a> {
         unsafe {
             assert!((*self.thread).handle_lock.is_held());
             (*self.thread).set_return_val(val)
+        }
+    }
+
+    pub fn kill(&self) {
+        unsafe {
+            assert!((*self.thread).handle_lock.is_held());
+            (*self.thread).kill()
         }
     }
 }
