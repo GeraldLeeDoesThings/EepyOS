@@ -1,7 +1,10 @@
 use core::arch::global_asm;
 
 use crate::{
-    println, reg::get_stval, syscall::handle_syscall, thread::{ThreadActivationResult, ThreadHandle}
+    println,
+    reg::get_stval,
+    syscall::handle_syscall,
+    thread::{ThreadActivationResult, ThreadHandle},
 };
 
 pub const INSTUCTION_ADDRESS_MISALIGNED: u64 = 0;
@@ -34,7 +37,7 @@ pub fn handle_exception(activation: &ThreadActivationResult, handle: &ThreadHand
         LOAD_ACCESS_FAULT => {
             println!("Error at: {:#010x}", unsafe { get_stval() });
             unimplemented!("Load Access Fault");
-        },
+        }
         STORE_AMO_ADDRESS_MISALIGNED => handle.kill(),
         STORE_AMO_ACCESS_FAULT => unimplemented!("Store AMO Access Fault"),
         USER_ENVIRONMENT_CALL => handle_syscall(activation, handle, false),

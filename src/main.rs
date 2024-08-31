@@ -20,7 +20,6 @@ mod uart;
 
 use consts::MAX_PROCESSES;
 use context::init_context;
-use time::{get_time, set_timecmp};
 use core::arch::{asm, global_asm};
 use core::panic::PanicInfo;
 use core::unreachable;
@@ -75,14 +74,15 @@ extern "C" fn kmain(hart_id: u64) -> ! {
             .expect("Failed to spawn second process");
 
         let _ = PROCESS_TABLE
-        .claim_first(Some(
-            ProcessControlBlock::new(test3, 2, 11, 0x5000_0000).unwrap(),
-        ))
-        .expect("Failed to spawn third process");
+            .claim_first(Some(
+                ProcessControlBlock::new(test3, 2, 11, 0x5000_0000).unwrap(),
+            ))
+            .expect("Failed to spawn third process");
     }
 
     loop {
         unsafe {
+            // TODO: Track number of "living" threads per process
             let scheduled_thread = match PROCESS_TABLE.choose_next_thread() {
                 None => {
                     println!("Out of threads to schedule, starting echo loop...");
@@ -137,8 +137,7 @@ extern "C" fn test2() -> u64 {
 extern "C" fn test3() -> u64 {
     // TODO: Move elsewhere
     println!("Looping forever... (in userspace)");
-    loop { }
-    return 0;
+    loop {}
 }
 
 #[no_mangle]

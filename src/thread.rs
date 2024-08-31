@@ -2,7 +2,8 @@ use crate::{
     println,
     resource::Resource,
     sync::{Mutex, MutexGuard, MutexLockError},
-    syscall::exit, time::{set_timecmp, set_timecmp_delay_ms},
+    syscall::exit,
+    time::set_timecmp_delay_ms,
 };
 use core::{error::Error, fmt::Display, ptr::addr_of};
 
@@ -44,7 +45,7 @@ pub enum ThreadActivationError {
 
 #[derive(Debug)]
 pub enum ThreadResolveInterruptError {
-    ThreadNotInterrupted(ThreadState)
+    ThreadNotInterrupted(ThreadState),
 }
 
 impl Display for ThreadState {
@@ -74,7 +75,11 @@ impl Display for ThreadActivationError {
 impl Display for ThreadResolveInterruptError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::ThreadNotInterrupted(state) => write!(f, "Thread state must be 'Interrupted', but the state is '{}'.", state),
+            Self::ThreadNotInterrupted(state) => write!(
+                f,
+                "Thread state must be 'Interrupted', but the state is '{}'.",
+                state
+            ),
         }
     }
 }
@@ -245,7 +250,9 @@ impl<'a> ThreadControlBlock {
                 self.state = ThreadState::Ready;
                 Ok(())
             }
-            _ => Err(ThreadResolveInterruptError::ThreadNotInterrupted(self.state))
+            _ => Err(ThreadResolveInterruptError::ThreadNotInterrupted(
+                self.state,
+            )),
         }
     }
 }
