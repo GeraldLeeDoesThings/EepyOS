@@ -2,7 +2,7 @@ use crate::{
     println,
     resource::Resource,
     sync::{Mutex, MutexGuard, MutexLockError},
-    syscall::exit,
+    syscall::exit, time::{set_timecmp, set_timecmp_delay_ms},
 };
 use core::{error::Error, fmt::Display, ptr::addr_of};
 
@@ -42,6 +42,11 @@ pub enum ThreadActivationError {
     ThreadNotReady(ThreadState),
 }
 
+#[derive(Debug)]
+pub enum ThreadResolveInterruptError {
+    ThreadNotInterrupted(ThreadState)
+}
+
 impl Display for ThreadState {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -62,6 +67,14 @@ impl Display for ThreadActivationError {
                 "Thread state must be 'Ready', but the state is '{}'.",
                 state
             ),
+        }
+    }
+}
+
+impl Display for ThreadResolveInterruptError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::ThreadNotInterrupted(state) => write!(f, "Thread state must be 'Interrupted', but the state is '{}'.", state),
         }
     }
 }
@@ -141,7 +154,7 @@ impl<'a> Default for CandidateThread<'a> {
 
 impl<'a> ThreadControlBlock {
     pub fn new(
-        code: extern "C" fn() -> i64,
+        code: extern "C" fn() -> u64,
         id: u16,
         priority: u16,
         stack_base: u64,
@@ -177,6 +190,7 @@ impl<'a> ThreadControlBlock {
                 self.need = self.priority as u32;
                 self.state = ThreadState::Running;
                 unsafe {
+                    set_timecmp_delay_ms(1000);
                     let result: ActivationResult =
                         activate_context(self.pc, addr_of!(self.registers) as u64);
                     self.pc = result.pc;
@@ -224,6 +238,16 @@ impl<'a> ThreadControlBlock {
             _ => self.state = ThreadState::Zombie,
         }
     }
+
+    fn resolve_interrupt(&mut self) -> Result<(), ThreadResolveInterruptError> {
+        match self.state {
+            ThreadState::Interrupted => {
+                self.state = ThreadState::Ready;
+                Ok(())
+            }
+            _ => Err(ThreadResolveInterruptError::ThreadNotInterrupted(self.state))
+        }
+    }
 }
 
 impl<'a> ThreadHandle<'a> {
@@ -252,6 +276,13 @@ impl<'a> ThreadHandle<'a> {
         unsafe {
             assert!((*self.thread).handle_lock.is_held());
             (*self.thread).kill()
+        }
+    }
+
+    pub fn resolve_interrupt(&self) -> Result<(), ThreadResolveInterruptError> {
+        unsafe {
+            assert!((*self.thread).handle_lock.is_held());
+            (*self.thread).resolve_interrupt()
         }
     }
 }

@@ -61,7 +61,7 @@ impl Error for ProcessControlBlockCreationError {
 
 impl ProcessControlBlock {
     pub fn new(
-        main: extern "C" fn() -> i64,
+        main: extern "C" fn() -> u64,
         id: u16,
         priority: u16,
         memory_base: u64,

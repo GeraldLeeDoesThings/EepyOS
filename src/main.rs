@@ -10,13 +10,17 @@ mod exception;
 mod interrupt;
 mod io;
 mod process;
+mod reg;
 mod resource;
 mod sync;
 mod syscall;
 mod thread;
+mod time;
 mod uart;
 
 use consts::MAX_PROCESSES;
+use context::init_context;
+use time::{get_time, set_timecmp};
 use core::arch::{asm, global_asm};
 use core::panic::PanicInfo;
 use core::unreachable;
@@ -25,7 +29,6 @@ use interrupt::{handle_interrupt, IS_INTERRUPT_MASK};
 use io::Writable;
 use process::ProcessControlBlock;
 use resource::ResourceManager;
-use syscall::exit;
 use uart::{UartHandler, UART0_BASE};
 
 use crate::io::Readable;
@@ -51,6 +54,7 @@ extern "C" fn kmain(hart_id: u64) -> ! {
 
     unsafe {
         init_exception_handler();
+        init_context();
         let maybe_test_process = ProcessControlBlock::new(test, 0, 10, 0x5000_0000);
 
         match maybe_test_process {
@@ -69,6 +73,12 @@ extern "C" fn kmain(hart_id: u64) -> ! {
                 ProcessControlBlock::new(test2, 1, 9, 0x5000_0000).unwrap(),
             ))
             .expect("Failed to spawn second process");
+
+        let _ = PROCESS_TABLE
+        .claim_first(Some(
+            ProcessControlBlock::new(test3, 2, 11, 0x5000_0000).unwrap(),
+        ))
+        .expect("Failed to spawn third process");
     }
 
     loop {
@@ -112,16 +122,23 @@ extern "C" fn kmain(hart_id: u64) -> ! {
     }
 }
 
-extern "C" fn test() -> i64 {
+extern "C" fn test() -> u64 {
     // TODO: Move elsewhere
     println!("Hello world!");
-    exit();
+    return 0;
 }
 
-extern "C" fn test2() -> i64 {
+extern "C" fn test2() -> u64 {
     // TODO: Move elsewhere
     println!("Hello from another process!");
-    exit();
+    return 0;
+}
+
+extern "C" fn test3() -> u64 {
+    // TODO: Move elsewhere
+    println!("Looping forever... (in userspace)");
+    loop { }
+    return 0;
 }
 
 #[no_mangle]

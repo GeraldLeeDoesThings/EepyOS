@@ -12,6 +12,14 @@ thread_context:
 
 .section ".text"
 
+init_context:
+    csrr a0, sstatus
+    ori a0, a0, 0x20
+    csrw sscratch, a0
+    li a0, 0x20
+    csrw sie, a0
+    ret
+
 activate_context:
     addi sp, sp, -496
     sd ra, 0(sp)
@@ -299,5 +307,6 @@ context_return:
     addi sp, sp, 496
     ret
 
+.global init_context
 .global activate_context
 .global context_return

@@ -4,9 +4,9 @@ use crate::thread::{ThreadActivationResult, ThreadHandle};
 
 pub const EXIT: u64 = 0;
 
-pub fn exit() -> ! {
+pub fn exit(status: u64) -> ! {
     unsafe {
-        syscall(EXIT);
+        syscall_1a(EXIT, status);
     }
     unreachable!("Execution survived exiting.")
 }
