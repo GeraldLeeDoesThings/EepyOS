@@ -3,12 +3,10 @@
 .section ".data"
 
 .align 8
-kernel_context:
+context_scratch:
+    .rept 12
     .dword 0xFFFFFFFFFFFFFFFF
-
-.align 8
-thread_context:
-    .dword 0xFFFFFFFFFFFFFFFF
+    .endr
 
 .section ".text"
 
@@ -85,13 +83,16 @@ activate_context:
     fsd ft10, 480(sp)
     fsd ft11, 488(sp)
 
-    la t0, kernel_context
+    la t0, context_scratch
+    li t1, 16
+    mul a2, a2, t1
+    add t0, t0, a2
     sd sp, 0(t0)
+    csrw sscratch, t0
 
     csrw sepc, a0
 
-    la t0, thread_context
-    sd a1, 0(t0)
+    sd a1, 8(t0)
 
     ld ra, 0(a1)
     ld sp, 8(a1)
@@ -164,9 +165,9 @@ activate_context:
 .align 4
 context_return:
 
-    csrw sscratch, a1
-    la a1, thread_context
-    ld a1, 0(a1)
+    csrrw a2, sscratch, a2
+    sd a1, 16(a2)
+    ld a1, 8(a2)
 
     sd ra, 0(a1)
     sd sp, 8(a1)
@@ -179,7 +180,7 @@ context_return:
     sd s1, 64(a1)
     sd a0, 72(a1)
 
-    sd a2, 88(a1)
+
     sd a3, 96(a1)
     sd a4, 104(a1)
     sd a5, 112(a1)
@@ -232,11 +233,12 @@ context_return:
     fsd ft10, 488(a1)
     fsd ft11, 496(a1)
 
-    csrr t0, sscratch
-    sd t0, 80(a1)
+    ld t0, 16(a2) // t0 <- a1
+    sd t0, 80(a1) // store a1
+    csrr t0, sscratch // t0 <- a2
+    sd t0, 88(a1) // store a2
 
-    la t0, kernel_context
-    ld sp, 0(t0)
+    ld sp, 0(a2)
 
     ld ra, 0(sp)
     ld gp, 8(sp)

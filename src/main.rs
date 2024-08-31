@@ -91,7 +91,7 @@ extern "C" fn kmain(hart_id: u64) -> ! {
                 Some(chosen_thread) => chosen_thread,
             };
 
-            let run_result = match scheduled_thread.activate() {
+            let run_result = match scheduled_thread.activate(hart_id) {
                 Ok(result) => result,
                 Err(msg) => {
                     println!("Error trying to run thread: {}", msg);

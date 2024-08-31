@@ -146,7 +146,7 @@ impl RegisterContext {
 }
 
 extern "C" {
-    pub fn activate_context(pc: u64, context_base: u64) -> ActivationResult;
+    pub fn activate_context(pc: u64, context_base: u64, hart_id: u64) -> ActivationResult;
     pub fn init_context();
 }
 

@@ -184,7 +184,7 @@ impl<'a> ThreadControlBlock {
         }
     }
 
-    fn activate(&mut self) -> Result<ThreadActivationResult, ThreadActivationError> {
+    fn activate(&mut self, hart_id: u64) -> Result<ThreadActivationResult, ThreadActivationError> {
         match self.state {
             ThreadState::Ready => {
                 self.need = self.priority as u32;
@@ -192,7 +192,7 @@ impl<'a> ThreadControlBlock {
                 unsafe {
                     set_timecmp_delay_ms(1000);
                     let result: ActivationResult =
-                        activate_context(self.pc, addr_of!(self.registers) as u64);
+                        activate_context(self.pc, addr_of!(self.registers) as u64, hart_id);
                     self.pc = result.pc;
                     self.state = ThreadState::Interrupted;
                     Ok(ThreadActivationResult {
@@ -251,10 +251,10 @@ impl<'a> ThreadControlBlock {
 }
 
 impl<'a> ThreadHandle<'a> {
-    pub fn activate(&self) -> Result<ThreadActivationResult, ThreadActivationError> {
+    pub fn activate(&self, hart_id: u64) -> Result<ThreadActivationResult, ThreadActivationError> {
         unsafe {
             assert!((*self.thread).handle_lock.is_held());
-            (*self.thread).activate()
+            (*self.thread).activate(hart_id)
         }
     }
 
