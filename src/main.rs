@@ -21,10 +21,10 @@ mod uart;
 
 use consts::MAX_PROCESSES;
 use context::init_context;
-use debug::test_context;
 use core::arch::{asm, global_asm};
 use core::panic::PanicInfo;
 use core::unreachable;
+use debug::test_context;
 use exception::{handle_exception, init_exception_handler};
 use interrupt::{handle_interrupt, IS_INTERRUPT_MASK};
 use io::Writable;

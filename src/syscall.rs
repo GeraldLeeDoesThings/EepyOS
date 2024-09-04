@@ -1,6 +1,9 @@
 use core::arch::global_asm;
 
-use crate::{println, thread::{ThreadActivationResult, ThreadHandle}};
+use crate::{
+    println,
+    thread::{ThreadActivationResult, ThreadHandle},
+};
 
 pub const EXIT: u64 = 0;
 pub const YIELD: u64 = 1;
