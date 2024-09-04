@@ -1,10 +1,14 @@
 ENTRY(_start)
 
 MEMORY {
-        ram (rwx) : ORIGIN = 0x42000000, LENGTH = 170M
+        ram (rwx) : ORIGIN = 0x40100000, LENGTH = 4095M
 }
 
 SECTIONS {
+
+        PROVIDE(_ram_start = ORIGIN(ram));
+        PROVIDE(_ram_length = LENGTH(ram));
+
         .text : {
                 PROVIDE(_text_start = .);
                 KEEP(*(.text.boot))
@@ -21,28 +25,46 @@ SECTIONS {
         } >ram AT>ram :text
 
         .data : {
-                . = ALIGN(4096);
                 PROVIDE(_data_start = .);
                 *(.sdata .sdata.*)
                 *(.data .data.*)
                 PROVIDE(_data_end = .);
         } >ram AT>ram :data
 
-        .bss : {
+        .bss (NOLOAD) : {
                 PROVIDE(_bss_start = .);
                 *(.sbss .sbss.*)
                 *(.bss .bss.*)
                 PROVIDE(_bss_end = .);
         } >ram AT>ram :bss
 
-        PROVIDE(_ram_start = ORIGIN(ram));
-        PROVIDE(_stack_start = _bss_end);
-        PROVIDE(_stack_end = _stack_start + 0x400000);
-        PROVIDE(_ram_end = _ram_start + LENGTH(ram));
+        .stack (NOLOAD) : ALIGN(16) {
+                PROVIDE(_stack_top = .);
+                . += 4K;
+                PROVIDE(_stack_base = .);
+        }
 
-        PROVIDE(_heap_start = _stack_end);
-        PROVIDE(_heap_size = _ram_end - _heap_start);
-        PROVIDE(_heap_end = _ram_end);
+        .comment : {
+                *(.comment .comment.*)
+        }
 
+        .riscv.attributes : {
+                *(.riscv.attributes .riscv.attributes.*)
+        }
+
+        .symtab : ALIGN(8) {
+                *(.symtab .symtab.*)
+        }
+
+        .shstrtab : {
+                *(.shstrtab .shstrtab.*)
+        }
+        
+        .strtab : {
+                *(.strtab .strtab.*)
+        }
+
+        . = ALIGN(4K);
+        PROVIDE(_heap_base = .);
 }
 

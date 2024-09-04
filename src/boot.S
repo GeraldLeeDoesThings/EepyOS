@@ -1,9 +1,13 @@
 
+#include "consts.S"
+
 .section ".text.boot"
 .global _start
 _start:
-        // Save hart id, stored in a0
+        // Save hart id
         mv a2, a0
+        // Save dtb pointer
+        mv a3, a1
 
         // Zero out bss
         la a0, _bss_start
@@ -14,7 +18,12 @@ _start:
         csrw sie, zero
 
         mv a0, a2
-        la sp, _stack_start
+        mv a1, a3
+        addi a2, a2, 1
+        la t0, _stack_base
+        li t1, KERNEL_STACK_SIZE
+        mul sp, a2, t1
+        add sp, sp, t0
         
         bnez a0, wait_for_boot
         j kmain

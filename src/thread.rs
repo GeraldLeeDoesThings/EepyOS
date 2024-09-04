@@ -244,10 +244,13 @@ impl<'a> ThreadControlBlock {
         }
     }
 
-    fn resolve_interrupt(&mut self) -> Result<(), ThreadResolveInterruptError> {
+    fn resolve_interrupt(&mut self, synchronous: bool) -> Result<(), ThreadResolveInterruptError> {
         match self.state {
             ThreadState::Interrupted => {
                 self.state = ThreadState::Ready;
+                if synchronous {
+                    self.pc += 4;
+                }
                 Ok(())
             }
             _ => Err(ThreadResolveInterruptError::ThreadNotInterrupted(
@@ -286,10 +289,20 @@ impl<'a> ThreadHandle<'a> {
         }
     }
 
-    pub fn resolve_interrupt(&self) -> Result<(), ThreadResolveInterruptError> {
+    pub fn resolve_interrupt(&self, synchronous: bool) -> Result<(), ThreadResolveInterruptError> {
         unsafe {
             assert!((*self.thread).handle_lock.is_held());
-            (*self.thread).resolve_interrupt()
+            (*self.thread).resolve_interrupt(synchronous)
+        }
+    }
+
+    pub fn resolve_interrupt_or_kill(&self, synchronous: bool) {
+        match self.resolve_interrupt(synchronous) {
+            Ok(_) => {}
+            Err(_) => {
+                self.kill();
+                println!("Mismatched thread state! Killing thread.")
+            }
         }
     }
 }

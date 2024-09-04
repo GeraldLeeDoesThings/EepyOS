@@ -1,14 +1,23 @@
 use core::arch::global_asm;
 
-use crate::thread::{ThreadActivationResult, ThreadHandle};
+use crate::{println, thread::{ThreadActivationResult, ThreadHandle}};
 
 pub const EXIT: u64 = 0;
+pub const YIELD: u64 = 1;
 
-pub fn exit(status: u64) -> ! {
+#[no_mangle]
+pub extern "C" fn exit(status: u64) -> ! {
     unsafe {
         syscall_1a(EXIT, status);
     }
     unreachable!("Execution survived exiting.")
+}
+
+#[no_mangle]
+pub extern "C" fn p_yield() {
+    unsafe {
+        syscall(YIELD);
+    }
 }
 
 pub fn handle_syscall(
@@ -20,6 +29,7 @@ pub fn handle_syscall(
     let code = args.get(0).unwrap();
     match *code {
         EXIT => handle.kill(),
+        YIELD => handle.resolve_interrupt_or_kill(true),
         _ => unimplemented!("Unknown Syscall: {:#010x}", *code), // Handle unknown syscalls later
     }
 }

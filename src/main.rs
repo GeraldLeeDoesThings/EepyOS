@@ -7,6 +7,7 @@ mod consts;
 mod context;
 mod debug;
 mod exception;
+mod heap;
 mod interrupt;
 mod io;
 mod process;
@@ -20,6 +21,7 @@ mod uart;
 
 use consts::MAX_PROCESSES;
 use context::init_context;
+use debug::test_context;
 use core::arch::{asm, global_asm};
 use core::panic::PanicInfo;
 use core::unreachable;
@@ -32,6 +34,7 @@ use uart::{UartHandler, UART0_BASE};
 
 use crate::io::Readable;
 
+global_asm!(include_str!("consts.S"));
 global_asm!(include_str!("boot.S"));
 
 static mut BOOTLOADER_RETURN_ADDRESS: i64 = 0;
@@ -40,7 +43,7 @@ static mut PROCESS_TABLE: ResourceManager<Option<ProcessControlBlock>, MAX_PROCE
 
 #[no_mangle]
 #[allow(dead_code)]
-extern "C" fn kmain(hart_id: u64) -> ! {
+extern "C" fn kmain(hart_id: u64, _dtb: *const u8) -> ! {
     unsafe {
         asm!(
             "mv {0}, ra",
@@ -69,15 +72,21 @@ extern "C" fn kmain(hart_id: u64) -> ! {
 
         let _ = PROCESS_TABLE
             .claim_first(Some(
-                ProcessControlBlock::new(test2, 1, 9, 0x5000_0000).unwrap(),
+                ProcessControlBlock::new(test2, 1, 9, 0x5100_0000).unwrap(),
             ))
             .expect("Failed to spawn second process");
 
         let _ = PROCESS_TABLE
             .claim_first(Some(
-                ProcessControlBlock::new(test3, 2, 11, 0x5000_0000).unwrap(),
+                ProcessControlBlock::new(test3, 2, 11, 0x5200_0000).unwrap(),
             ))
             .expect("Failed to spawn third process");
+
+        let _ = PROCESS_TABLE
+            .claim_first(Some(
+                ProcessControlBlock::new(test_context, 3, 11, 0x5300_0000).unwrap(),
+            ))
+            .expect("Failed to spawn fourth process");
     }
 
     loop {

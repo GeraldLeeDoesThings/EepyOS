@@ -12,13 +12,7 @@ pub fn handle_interrupt(activation: &ThreadActivationResult, handle: &ThreadHand
     let reason: u64 = activation.cause ^ IS_INTERRUPT_MASK;
     match reason {
         SOFTWARE_INTERRUPT => handle.kill(), // No idea how to handle this for now
-        TIMER_INTERRUPT => match handle.resolve_interrupt() {
-            Ok(_) => {}
-            Err(_) => {
-                handle.kill();
-                println!("Mismatched thread state! Killing thread.")
-            }
-        }, // Do nothing, just need to reschedule
+        TIMER_INTERRUPT => handle.resolve_interrupt_or_kill(false), // Do nothing, just need to reschedule
         EXTERNAL_INTERRUPT => handle.kill(), // No idea how to handle this for now
         _ => panic!("Unknown interrupt encountered: {}", reason),
     }
