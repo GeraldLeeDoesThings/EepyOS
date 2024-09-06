@@ -38,12 +38,3 @@ clear_bss:
 wait_for_boot:
         wfi
         j wait_for_boot
-
-.section ".bss"
-.balign 16
-stack:
-        .rept 0x10000
-        .byte 0
-        .endr
-stackend:
-
