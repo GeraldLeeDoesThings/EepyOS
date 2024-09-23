@@ -1,10 +1,15 @@
 #![no_main]
 #![no_std]
+#![feature(allocator_api)]
+#![feature(const_box)]
 #![feature(error_generic_member_access)]
 #![feature(impl_trait_in_assoc_type)]
+#![feature(new_uninit)]
+#![feature(slice_ptr_get)]
 
 mod consts;
 mod context;
+mod data;
 mod debug;
 mod exception;
 mod heap;
@@ -26,6 +31,7 @@ use core::panic::PanicInfo;
 use core::unreachable;
 use debug::test_context;
 use exception::{handle_exception, init_exception_handler};
+use heap::init_allocators;
 use interrupt::{handle_interrupt, IS_INTERRUPT_MASK};
 use io::Writable;
 use process::ProcessControlBlock;
@@ -33,6 +39,7 @@ use resource::ResourceManager;
 use uart::{UartHandler, UART0_BASE};
 
 use crate::io::Readable;
+extern crate alloc;
 
 global_asm!(include_str!("consts.S"));
 global_asm!(include_str!("boot.S"));
@@ -57,6 +64,7 @@ extern "C" fn kmain(hart_id: u64, _dtb: *const u8) -> ! {
     unsafe {
         init_exception_handler();
         init_context();
+        init_allocators();
         let maybe_test_process = ProcessControlBlock::new(test, 0, 10, 0x5000_0000);
 
         match maybe_test_process {

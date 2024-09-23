@@ -18,7 +18,7 @@ const LSR_THRE_BITMASK: u8 = 0x1 << 5;
 pub struct UartHandler {
     rbr: *const u8,
     thr: *mut u8,
-    lcr: *mut u8,
+    _lcr: *mut u8,
     lsr: *const u8,
 }
 
@@ -66,7 +66,7 @@ impl UartHandler {
             let handler = UartHandler {
                 rbr: base_ptr.byte_offset(RBR_OFFSET) as *const u8,
                 thr: base_ptr.byte_offset(THR_OFFSET) as *mut u8,
-                lcr: base_ptr.byte_offset(LCR_OFFSET) as *mut u8,
+                _lcr: base_ptr.byte_offset(LCR_OFFSET) as *mut u8,
                 lsr: base_ptr.byte_offset(LSR_OFFSET) as *const u8,
             };
             // handler.lcr.write_volatile(0x00000003); // Set word length

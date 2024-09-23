@@ -1,7 +1,7 @@
 use crate::{
     println,
     resource::Resource,
-    sync::{Mutex, MutexGuard, MutexLockError},
+    sync::{Mutex, MutexGuardMut, MutexLockError},
     syscall::exit,
     time::set_timecmp_delay_ms,
 };
@@ -33,7 +33,7 @@ pub struct ThreadActivationResult<'a> {
 }
 
 pub struct ThreadHandle<'a> {
-    _guard: MutexGuard<'a, ()>,
+    _guard: MutexGuardMut<'a, ()>,
     thread: *mut ThreadControlBlock,
 }
 
@@ -180,7 +180,7 @@ impl<'a> ThreadControlBlock {
 
     pub fn get_handle(&mut self) -> Result<ThreadHandle<'_>, ThreadHandleClaimError> {
         let t: *mut ThreadControlBlock = self;
-        match self.handle_lock.lock() {
+        match self.handle_lock.lock_mut() {
             Ok(handle) => Ok(ThreadHandle {
                 _guard: handle,
                 thread: t,

@@ -1,6 +1,7 @@
 
 #include "consts.S"
 
+.attribute arch, "rv64gc"
 .section ".text.boot"
 .global _start
 _start:

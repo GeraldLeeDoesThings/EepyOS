@@ -1,7 +1,4 @@
-use crate::{
-    println,
-    thread::{ThreadActivationResult, ThreadHandle},
-};
+use crate::thread::{ThreadActivationResult, ThreadHandle};
 
 pub const IS_INTERRUPT_MASK: u64 = 0x80000000_00000000;
 pub const SOFTWARE_INTERRUPT: u64 = 1;

@@ -1,6 +1,6 @@
 use core::arch::global_asm;
 
-use crate::{println, syscall::p_yield};
+use crate::println;
 
 extern "C" {
     pub fn test_context_asm() -> u64;

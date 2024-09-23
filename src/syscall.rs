@@ -1,9 +1,6 @@
 use core::arch::global_asm;
 
-use crate::{
-    println,
-    thread::{ThreadActivationResult, ThreadHandle},
-};
+use crate::thread::{ThreadActivationResult, ThreadHandle};
 
 pub const EXIT: u64 = 0;
 pub const YIELD: u64 = 1;
@@ -26,7 +23,7 @@ pub extern "C" fn p_yield() {
 pub fn handle_syscall(
     activation: &ThreadActivationResult,
     handle: &ThreadHandle,
-    supervisor: bool,
+    _supervisor: bool,
 ) {
     let args = activation.thread.get_args();
     let code = args.get(0).unwrap();
@@ -37,6 +34,7 @@ pub fn handle_syscall(
     }
 }
 
+#[allow(unused)]
 extern "C" {
     pub fn syscall(code: u64) -> i64;
     pub fn syscall_1a(code: u64, arg1: u64) -> i64;
