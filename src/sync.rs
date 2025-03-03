@@ -6,6 +6,8 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+use crate::consts::MAX_LOCK_ACQUIRE_CYCLES;
+
 pub struct Lock {
     claimed: AtomicBool,
 }
@@ -61,24 +63,30 @@ impl Lock {
 
     pub fn claim(&self) -> Result<bool, bool> {
         self.claimed
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::Relaxed)
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
     }
 
     pub fn claim_blocking(&self) {
         let mut claimed = self.claim();
-        while claimed.is_err() {
+        let mut limit: usize = 0;
+        while claimed.is_err() && limit < MAX_LOCK_ACQUIRE_CYCLES {
             claimed = self.claim();
+            limit += 1;
         }
+        assert!(
+            limit < MAX_LOCK_ACQUIRE_CYCLES,
+            "Took too long to claim lock!"
+        );
         assert!(self.is_held());
     }
 
     pub fn release(&self) -> Result<bool, bool> {
         self.claimed
-            .compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed)
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
     }
 
     pub fn is_held(&self) -> bool {
-        self.claimed.load(Ordering::Relaxed)
+        self.claimed.load(Ordering::SeqCst)
     }
 }
 
@@ -97,6 +105,7 @@ impl<T> Mutex<T> {
         }
     }
 
+    #[allow(unused)]
     pub fn lock(&self) -> Result<MutexGuard<'_, T>, MutexLockError> {
         match self.lock.claim() {
             Ok(_) => Ok(MutexGuard { mutex: self }),

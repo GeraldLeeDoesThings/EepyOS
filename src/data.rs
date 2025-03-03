@@ -1,51 +1,66 @@
 use alloc::{alloc::Global, boxed::Box, vec::Vec};
 use core::{
     alloc::Allocator,
-    sync::atomic::{AtomicUsize, Ordering::Relaxed},
+    fmt::{Debug, Write},
+    sync::atomic::{
+        AtomicUsize,
+        Ordering::{AcqRel, Acquire, Relaxed},
+    },
     usize,
 };
 
 pub struct AtomicBitVec<A: Allocator = Global> {
     inner: Box<[AtomicUsize], A>,
-    _length: usize,
+    length: usize,
 }
 
 impl<A: Allocator> AtomicBitVec<A> {
     pub fn new_in(size: usize, allocator: A) -> AtomicBitVec<A> {
         let num_elems = size.div_ceil(usize::BITS as usize);
         let mut inner = Vec::with_capacity_in(num_elems, allocator);
-        inner.extend((0..num_elems).map(|_| AtomicUsize::new(0)));
+        (0..num_elems).for_each(|_| {
+            inner
+                .push_within_capacity(AtomicUsize::new(0))
+                .expect("Bit vec inner does not have enough capacity")
+        });
+        let raw_inner = inner.into_boxed_slice();
         AtomicBitVec {
-            inner: inner.into_boxed_slice(),
-            _length: size,
+            inner: raw_inner,
+            length: size,
         }
     }
 
     pub fn get(&self, index: usize) -> Option<bool> {
+        if index >= self.length {
+            return None;
+        }
         let inner_index = index / usize::BITS as usize;
         let inner_offset = index % usize::BITS as usize;
-        let packed = self.inner.get(inner_index)?.load(Relaxed);
+        let packed = self.inner.get(inner_index)?.load(Acquire);
         Some(packed & (1 << inner_offset) > 0)
     }
 
     pub fn set(&self, index: usize, val: bool) -> Option<bool> {
+        if index >= self.length {
+            return None;
+        }
         let inner_index = index / usize::BITS as usize;
         let inner_offset = index % usize::BITS as usize;
         if val {
             self.inner
                 .get(inner_index)?
-                .fetch_or(1 << inner_offset, Relaxed);
+                .fetch_or(1 << inner_offset, AcqRel);
         } else {
             self.inner
                 .get(inner_index)?
-                .fetch_and(!(1 << inner_offset), Relaxed);
+                .fetch_and(!(1 << inner_offset), AcqRel);
         }
         Some(val)
     }
 
     pub fn _find_false(&self) -> Option<usize> {
         for (index, val) in self.inner.iter().enumerate() {
-            let packed = val.load(Relaxed);
+            let packed = val.load(Acquire);
             if packed < usize::MAX {
                 return Some(index * 8 + usize::BITS as usize - 1 - packed.leading_ones() as usize);
             }
@@ -65,9 +80,9 @@ impl<A: Allocator> AtomicBitVec<A> {
 
         fn apply_op(packed: &AtomicUsize, op: usize, val: bool) {
             if val {
-                packed.fetch_or(op, Relaxed);
+                packed.fetch_or(op, AcqRel);
             } else {
-                packed.fetch_and(op, Relaxed);
+                packed.fetch_and(op, AcqRel);
             }
         }
 
@@ -130,6 +145,17 @@ impl<A: Allocator> AtomicBitVec<A> {
     }
 
     pub fn _len(&self) -> usize {
-        self._length
+        self.length
+    }
+}
+
+impl<A: Allocator> Debug for AtomicBitVec<A> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_char('[')?;
+        for packed in self.inner.iter() {
+            write!(f, "{:b}", packed.load(Relaxed))?;
+        }
+        f.write_char(']')?;
+        Ok(())
     }
 }

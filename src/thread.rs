@@ -24,6 +24,7 @@ pub struct ThreadControlBlock {
     id: u16,
     priority: u16,
     need: u32,
+    owning_process_id: u16,
     handle_lock: Mutex<()>,
 }
 
@@ -163,6 +164,7 @@ impl<'a> ThreadControlBlock {
         id: u16,
         priority: u16,
         stack_base: u64,
+        owning_process_id: u16,
     ) -> ThreadControlBlock {
         let mut tcb = ThreadControlBlock {
             registers: RegisterContext::all_zero(),
@@ -171,6 +173,7 @@ impl<'a> ThreadControlBlock {
             id: id,
             priority: priority,
             need: priority as u32,
+            owning_process_id: owning_process_id,
             handle_lock: Mutex::new(()),
         };
         tcb.registers.sp = stack_base;
@@ -237,9 +240,15 @@ impl<'a> ThreadControlBlock {
     }
 
     fn kill(&mut self) {
-        println!("Killing thread with id {}", self.id);
+        println!(
+            "Killing thread with id {} from process {}",
+            self.id, self.owning_process_id
+        );
         match self.state {
-            ThreadState::Running => panic!("Tried to kill running thread with id: {}", self.id),
+            ThreadState::Running => panic!(
+                "Tried to kill running thread with id: {} from process {}",
+                self.id, self.owning_process_id
+            ),
             _ => self.state = ThreadState::Zombie,
         }
     }

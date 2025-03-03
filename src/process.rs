@@ -10,15 +10,15 @@ use super::thread::{CandidateThread, ThreadControlBlock};
 #[derive(Clone, Copy)]
 pub enum ProcessStatus {
     Ready,
-    Zombie,
+    _Zombie,
 }
 
 pub struct ProcessControlBlock {
-    id: u16,
+    _id: u16,
     threads: ResourceManager<Option<ThreadControlBlock>, MAX_THREADS>,
-    priority: u16,
+    _priority: u16,
     status: ProcessStatus,
-    memory_base: u64,
+    _memory_base: u64,
 }
 
 #[derive(Debug)]
@@ -67,11 +67,11 @@ impl ProcessControlBlock {
         memory_base: u64,
     ) -> Result<ProcessControlBlock, ProcessControlBlockCreationError> {
         let mut empty = ProcessControlBlock {
-            id: id,
+            _id: id,
             threads: ResourceManager::new([const { None }; MAX_THREADS]),
-            priority: priority,
+            _priority: priority,
             status: ProcessStatus::Ready,
-            memory_base: memory_base,
+            _memory_base: memory_base,
         };
 
         match empty.threads.claim_first(Some(ThreadControlBlock::new(
@@ -79,6 +79,7 @@ impl ProcessControlBlock {
             0,
             priority,
             memory_base,
+            id,
         ))) {
             Ok(index) => match index {
                 0 => Ok(empty),
@@ -109,7 +110,7 @@ impl Resource for Option<ProcessControlBlock> {
         match self {
             None => true,
             Some(process) => match process.status {
-                ProcessStatus::Zombie => true,
+                ProcessStatus::_Zombie => true,
                 _ => false,
             },
         }

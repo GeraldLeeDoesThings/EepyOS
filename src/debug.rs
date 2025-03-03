@@ -11,6 +11,7 @@ extern "C" fn print_reg_hex(val: u64) {
     println!("{:#010x}", val);
 }
 
+#[allow(unused)]
 pub extern "C" fn test_context() -> u64 {
     unsafe { test_context_asm() }
 }
