@@ -474,6 +474,7 @@ impl SlabHeader {
             next.prev.store(prev_index, SeqCst);
             self.offset = Some(next_index);
         }
+        assert!(self.owns(val_ptr as *mut u8));
         self.in_use += 1;
         val_ptr
     }

@@ -27,6 +27,7 @@ extern "C" {
 
 global_asm!(include_str!("exception.S"));
 
+#[allow(clippy::match_same_arms)]
 pub fn handle_exception(activation: &ThreadActivationResult, handle: &ThreadHandle) {
     match activation.cause {
         INSTUCTION_ADDRESS_MISALIGNED => unimplemented!("Instruction Address Misaligned"),
@@ -42,7 +43,10 @@ pub fn handle_exception(activation: &ThreadActivationResult, handle: &ThreadHand
         STORE_AMO_ACCESS_FAULT => unimplemented!("Store AMO Access Fault"),
         USER_ENVIRONMENT_CALL => handle_syscall(activation, handle, false),
         SUPERVISOR_ENVIRONMENT_CALL => handle_syscall(activation, handle, true),
-        INSTRUCTION_PAGE_FAULT => unimplemented!("Instruction Page Fault"),
+        INSTRUCTION_PAGE_FAULT => {
+            println!("Instruction Page Fault");
+            handle.kill();
+        }
         LOAD_PAGE_FAULT => unimplemented!("Load Page Fault"),
         STORE_AMO_PAGE_FAULT => unimplemented!("Store AMO Page Fault"),
         reason => panic!("Unknown exception encountered: {:#010x}", reason),

@@ -11,4 +11,5 @@ test = false
 bench = false
 
 [dependencies]
+paste = "1.0.15"
 

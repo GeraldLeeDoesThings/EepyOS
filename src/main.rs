@@ -1,19 +1,16 @@
 #![no_main]
 #![no_std]
 #![feature(allocator_api)]
+#![feature(atomic_try_update)]
+#![feature(box_as_ptr)]
 #![feature(const_box)]
 #![feature(error_generic_member_access)]
 #![feature(impl_trait_in_assoc_type)]
 #![feature(new_range_api)]
+#![feature(new_zeroed_alloc)]
 #![feature(slice_ptr_get)]
 #![feature(vec_push_within_capacity)]
-#![warn(
-    clippy::all,
-    clippy::restriction,
-    clippy::pedantic,
-    clippy::nursery,
-    clippy::cargo
-)]
+#![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
 
 mod console;
 mod consts;
@@ -24,6 +21,7 @@ mod exception;
 mod heap;
 mod interrupt;
 mod io;
+mod mmu;
 mod process;
 mod reg;
 mod resource;
@@ -42,6 +40,7 @@ use core::{str, unreachable};
 use exception::{handle_exception, init_exception_handler};
 use heap::init_allocators;
 use interrupt::{handle_interrupt, IS_INTERRUPT_MASK};
+use mmu::Sv39PageTable;
 use process::ProcessControlBlock;
 use resource::ResourceManager;
 use sync::Mutex;
@@ -112,6 +111,11 @@ extern "C" fn kmain(hart_id: u64, _dtb: *const u8) -> ! {
             .expect("Failed to spawn fourth process");
         */
     }
+
+    let mut root_page_table = Sv39PageTable::new();
+    root_page_table.as_mut().flat_map();
+    println!("Table Address: {:p}", root_page_table);
+    root_page_table.as_mut().activate();
 
     loop {
         // TODO: Track number of "living" threads per process
