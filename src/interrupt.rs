@@ -1,12 +1,13 @@
 use crate::thread::{ThreadActivationResult, ThreadHandle};
 
-pub const IS_INTERRUPT_MASK: u64 = 0x80000000_00000000;
-pub const SOFTWARE_INTERRUPT: u64 = 1;
-pub const TIMER_INTERRUPT: u64 = 5;
-pub const EXTERNAL_INTERRUPT: u64 = 9;
+pub const IS_INTERRUPT_MASK: usize = 0x8000_0000_0000_0000;
+pub const SOFTWARE_INTERRUPT: usize = 1;
+pub const TIMER_INTERRUPT: usize = 5;
+pub const EXTERNAL_INTERRUPT: usize = 9;
 
+#[allow(clippy::match_same_arms)]
 pub fn handle_interrupt(activation: &ThreadActivationResult, handle: &ThreadHandle) {
-    let reason: u64 = activation.cause ^ IS_INTERRUPT_MASK;
+    let reason: usize = activation.cause ^ IS_INTERRUPT_MASK;
     match reason {
         SOFTWARE_INTERRUPT => handle.kill(), // No idea how to handle this for now
         TIMER_INTERRUPT => handle.resolve_interrupt_or_kill(false), // Do nothing, just need to reschedule

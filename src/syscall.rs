@@ -2,11 +2,11 @@ use core::arch::global_asm;
 
 use crate::thread::{ThreadActivationResult, ThreadHandle};
 
-pub const EXIT: u64 = 0;
-pub const YIELD: u64 = 1;
+pub const EXIT: usize = 0;
+pub const YIELD: usize = 1;
 
 #[no_mangle]
-pub extern "C" fn exit(status: u64) -> ! {
+pub extern "C" fn exit(status: usize) -> ! {
     unsafe {
         syscall_1a(EXIT, status);
     }
@@ -26,7 +26,7 @@ pub fn handle_syscall(
     _supervisor: bool,
 ) {
     let args = activation.thread.get_args();
-    let code = args.get(0).unwrap();
+    let code = args.first().unwrap();
     match *code {
         EXIT => handle.kill(),
         YIELD => handle.resolve_interrupt_or_kill(true),
@@ -36,31 +36,38 @@ pub fn handle_syscall(
 
 #[allow(unused)]
 extern "C" {
-    pub fn syscall(code: u64) -> i64;
-    pub fn syscall_1a(code: u64, arg1: u64) -> i64;
-    pub fn syscall_2a(code: u64, arg1: u64, arg2: u64) -> i64;
-    pub fn syscall_3a(code: u64, arg1: u64, arg2: u64, arg3: u64) -> i64;
-    pub fn syscall_4a(code: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64) -> i64;
-    pub fn syscall_5a(code: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> i64;
+    pub fn syscall(code: usize) -> isize;
+    pub fn syscall_1a(code: usize, arg1: usize) -> isize;
+    pub fn syscall_2a(code: usize, arg1: usize, arg2: usize) -> isize;
+    pub fn syscall_3a(code: usize, arg1: usize, arg2: usize, arg3: usize) -> isize;
+    pub fn syscall_4a(code: usize, arg1: usize, arg2: usize, arg3: usize, arg4: usize) -> isize;
+    pub fn syscall_5a(
+        code: usize,
+        arg1: usize,
+        arg2: usize,
+        arg3: usize,
+        arg4: usize,
+        arg5: usize,
+    ) -> isize;
     pub fn syscall_6a(
-        code: u64,
-        arg1: u64,
-        arg2: u64,
-        arg3: u64,
-        arg4: u64,
-        arg5: u64,
-        arg6: u64,
-    ) -> i64;
+        code: usize,
+        arg1: usize,
+        arg2: usize,
+        arg3: usize,
+        arg4: usize,
+        arg5: usize,
+        arg6: usize,
+    ) -> isize;
     pub fn syscall_7a(
-        code: u64,
-        arg1: u64,
-        arg2: u64,
-        arg3: u64,
-        arg4: u64,
-        arg5: u64,
-        arg6: u64,
-        arg7: u64,
-    ) -> i64;
+        code: usize,
+        arg1: usize,
+        arg2: usize,
+        arg3: usize,
+        arg4: usize,
+        arg5: usize,
+        arg6: usize,
+        arg7: usize,
+    ) -> isize;
 }
 
 global_asm!(include_str!("syscall.S"));

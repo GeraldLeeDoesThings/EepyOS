@@ -43,7 +43,7 @@ impl Error for MutexLockError {
         None
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "description() is deprecated; use Display"
     }
 
@@ -55,8 +55,8 @@ impl Error for MutexLockError {
 }
 
 impl Lock {
-    pub const fn new() -> Lock {
-        Lock {
+    pub const fn new() -> Self {
+        Self {
             claimed: AtomicBool::new(false),
         }
     }
@@ -91,8 +91,8 @@ impl Lock {
 }
 
 impl<T> Mutex<T> {
-    pub const fn new(val: T) -> Mutex<T> {
-        Mutex {
+    pub const fn new(val: T) -> Self {
+        Self {
             guarded: UnsafeCell::new(val),
             lock: Lock::new(),
         }
@@ -130,7 +130,7 @@ impl<T> Mutex<T> {
 
 unsafe impl<T> Sync for Mutex<T> {}
 
-impl<'a, T> Deref for MutexGuardMut<'a, T> {
+impl<T> Deref for MutexGuardMut<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -144,7 +144,7 @@ impl<'a, T> Deref for MutexGuardMut<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for MutexGuardMut<'a, T> {
+impl<T> DerefMut for MutexGuardMut<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe {
             self.mutex
@@ -156,7 +156,8 @@ impl<'a, T> DerefMut for MutexGuardMut<'a, T> {
     }
 }
 
-impl<'a, T> Drop for MutexGuardMut<'a, T> {
+#[allow(clippy::match_wild_err_arm)]
+impl<T> Drop for MutexGuardMut<'_, T> {
     fn drop(&mut self) {
         match self.mutex.lock.release() {
             Ok(_) => (),
@@ -165,7 +166,7 @@ impl<'a, T> Drop for MutexGuardMut<'a, T> {
     }
 }
 
-impl<'a, T> Deref for MutexGuard<'a, T> {
+impl<T> Deref for MutexGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -179,7 +180,8 @@ impl<'a, T> Deref for MutexGuard<'a, T> {
     }
 }
 
-impl<'a, T> Drop for MutexGuard<'a, T> {
+#[allow(clippy::match_wild_err_arm)]
+impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         match self.mutex.lock.release() {
             Ok(_) => (),

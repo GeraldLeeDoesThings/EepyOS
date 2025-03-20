@@ -24,7 +24,7 @@ impl Error for ResourceClaimError {
         None
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "description() is deprecated; use Display"
     }
 
@@ -61,7 +61,7 @@ impl<'a, R: Resource, const SIZE: usize> IntoIterator for &'a mut ResourceManage
 
 impl<R: Resource, const SIZE: usize> ResourceManager<R, SIZE> {
     pub const fn new(data: [R; SIZE]) -> Self {
-        Self { data: data }
+        Self { data }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &R> {

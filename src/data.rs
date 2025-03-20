@@ -6,7 +6,6 @@ use core::{
         AtomicUsize,
         Ordering::{AcqRel, Acquire, Relaxed},
     },
-    usize,
 };
 
 pub struct AtomicBitVec<A: Allocator = Global> {
@@ -15,16 +14,16 @@ pub struct AtomicBitVec<A: Allocator = Global> {
 }
 
 impl<A: Allocator> AtomicBitVec<A> {
-    pub fn new_in(size: usize, allocator: A) -> AtomicBitVec<A> {
+    pub fn new_in(size: usize, allocator: A) -> Self {
         let num_elems = size.div_ceil(usize::BITS as usize);
         let mut inner = Vec::with_capacity_in(num_elems, allocator);
         (0..num_elems).for_each(|_| {
             inner
                 .push_within_capacity(AtomicUsize::new(0))
-                .expect("Bit vec inner does not have enough capacity")
+                .expect("Bit vec inner does not have enough capacity");
         });
         let raw_inner = inner.into_boxed_slice();
-        AtomicBitVec {
+        Self {
             inner: raw_inner,
             length: size,
         }
@@ -132,7 +131,7 @@ impl<A: Allocator> AtomicBitVec<A> {
                             .expect("Ran out of values during mass write!"),
                         op,
                         val,
-                    )
+                    );
                 });
                 Some(
                     usize::BITS as usize - lo_inner_offset
@@ -144,7 +143,7 @@ impl<A: Allocator> AtomicBitVec<A> {
         }
     }
 
-    pub fn _len(&self) -> usize {
+    pub const fn _len(&self) -> usize {
         self.length
     }
 }
@@ -152,7 +151,7 @@ impl<A: Allocator> AtomicBitVec<A> {
 impl<A: Allocator> Debug for AtomicBitVec<A> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_char('[')?;
-        for packed in self.inner.iter() {
+        for packed in &self.inner {
             write!(f, "{:b}", packed.load(Relaxed))?;
         }
         f.write_char(']')?;

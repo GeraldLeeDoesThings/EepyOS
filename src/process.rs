@@ -18,7 +18,7 @@ pub struct ProcessControlBlock {
     threads: ResourceManager<Option<ThreadControlBlock>, MAX_THREADS>,
     _priority: u16,
     status: ProcessStatus,
-    _memory_base: u64,
+    _memory_base: usize,
 }
 
 #[derive(Debug)]
@@ -32,8 +32,7 @@ impl Display for ProcessControlBlockCreationError {
         match self {
             Self::CouldNotClaimMainThread(inner_err) => write!(
                 f,
-                "Failed to claim main thread from resource manager due to error:\n{}",
-                inner_err
+                "Failed to claim main thread from resource manager due to error:\n{inner_err}"
             ),
             Self::MainThreadHasNonZeroID => write!(f, "Main thread was assigned non-zero ID."),
         }
@@ -48,7 +47,7 @@ impl Error for ProcessControlBlockCreationError {
         }
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "description() is deprecated; use Display"
     }
 
@@ -61,12 +60,12 @@ impl Error for ProcessControlBlockCreationError {
 
 impl ProcessControlBlock {
     pub fn new(
-        main: extern "C" fn() -> u64,
+        main: extern "C" fn() -> usize,
         id: u16,
         priority: u16,
-        memory_base: u64,
-    ) -> Result<ProcessControlBlock, ProcessControlBlockCreationError> {
-        let mut empty = ProcessControlBlock {
+        memory_base: usize,
+    ) -> Result<Self, ProcessControlBlockCreationError> {
+        let mut empty = Self {
             _id: id,
             threads: ResourceManager::new([const { None }; MAX_THREADS]),
             _priority: priority,
@@ -92,12 +91,10 @@ impl ProcessControlBlock {
     }
 
     pub fn choose<'a>(&'a mut self, mut candidate: CandidateThread<'a>) -> CandidateThread<'a> {
-        for maybe_thread in &mut self.threads.iter_mut() {
-            if let Some(thread) = maybe_thread {
-                if let Ok(handle) = thread.get_handle() {
-                    if let Some(new_best) = handle.consider(candidate.best) {
-                        candidate = CandidateThread::new(new_best, Some(handle));
-                    }
+        for thread in (&mut self.threads.iter_mut()).flatten() {
+            if let Ok(handle) = thread.get_handle() {
+                if let Some(new_best) = handle.consider(candidate.best) {
+                    candidate = CandidateThread::new(new_best, Some(handle));
                 }
             }
         }
@@ -107,13 +104,8 @@ impl ProcessControlBlock {
 
 impl Resource for Option<ProcessControlBlock> {
     fn exhausted(&self) -> bool {
-        match self {
-            None => true,
-            Some(process) => match process.status {
-                ProcessStatus::_Zombie => true,
-                _ => false,
-            },
-        }
+        self.as_ref()
+            .is_none_or(|process| matches!(process.status, ProcessStatus::_Zombie))
     }
 }
 

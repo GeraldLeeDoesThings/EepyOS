@@ -17,7 +17,7 @@ extern "C" {
 
 global_asm!(include_str!("heap.S"));
 
-const RAM_BASE: *mut u8 = 0x40000000 as *mut u8;
+const RAM_BASE: *mut u8 = 0x4000_0000 as *mut u8;
 const RAM_LENGTH: usize = 1024 * 1024 * 1024 * 4;
 const RAM_END: *mut u8 = RAM_BASE.wrapping_add(RAM_LENGTH);
 const RAM_RANGE: Range<*mut u8> = Range {
@@ -40,23 +40,27 @@ unsafe impl Allocator for &BumpAllocator {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         unsafe {
             let heap_base = get_heap_base();
-            match self.offset.fetch_update(SeqCst, SeqCst, |offset| {
-                let heap_top = heap_base.add(offset);
-                let aligned: *mut u8 = heap_top.add(heap_top.align_offset(layout.align()));
-                if RAM_END.offset_from(aligned) > layout.size() as isize {
-                    let new_offset = aligned.offset_from(heap_base) as usize + layout.size();
-                    Some(new_offset)
-                } else {
-                    None
-                }
-            }) {
-                Ok(prev) => Ok(NonNull::new(slice_from_raw_parts_mut(
-                    heap_base.add(prev),
-                    layout.size(),
-                ))
-                .expect("Allocated null pointer!")),
-                Err(_) => Err(AllocError {}),
-            }
+            self.offset
+                .fetch_update(SeqCst, SeqCst, |offset| {
+                    let heap_top = heap_base.add(offset);
+                    let aligned: *mut u8 = heap_top.add(heap_top.align_offset(layout.align()));
+                    if RAM_END.offset_from(aligned)
+                        > isize::try_from(layout.size()).expect("Layout size is larger than isize.")
+                    {
+                        let new_offset = usize::try_from(aligned.offset_from(heap_base))
+                            .expect("Bump allocator is pointing below the heap base.")
+                            + layout.size();
+                        Some(new_offset)
+                    } else {
+                        None
+                    }
+                })
+                .map_or(Err(AllocError {}), |prev| {
+                    Ok(
+                        NonNull::new(slice_from_raw_parts_mut(heap_base.add(prev), layout.size()))
+                            .expect("Allocated null pointer!"),
+                    )
+                })
         }
     }
 
@@ -72,10 +76,10 @@ struct PageLink {
 }
 
 impl PageLink {
-    unsafe fn allocate(&mut self) -> Option<*mut PageLink> {
-        let self_addr = self as *mut PageLink;
+    unsafe fn allocate(&mut self) -> Option<*mut Self> {
+        let self_addr = self as *mut Self;
         let prev = self.prev.load(SeqCst);
-        let next: *mut PageLink = self.next.load(SeqCst);
+        let next: *mut Self = self.next.load(SeqCst);
         if next == self_addr {
             assert!(prev == next);
             return None;
@@ -85,8 +89,8 @@ impl PageLink {
         Some(next)
     }
 
-    unsafe fn deallocate(&mut self, other: &AtomicPtr<PageLink>) {
-        let self_addr = self as *mut PageLink;
+    unsafe fn deallocate(&mut self, other: &AtomicPtr<Self>) {
+        let self_addr = self as *mut Self;
         match other.load(SeqCst) {
             null_other if null_other.is_null() => {
                 self.prev.store(self_addr, SeqCst);
@@ -95,7 +99,7 @@ impl PageLink {
             }
             other => {
                 let next = (*other).next.swap(self_addr, SeqCst);
-                self.prev.store((other as usize) as *mut PageLink, SeqCst);
+                self.prev.store((other as usize) as *mut Self, SeqCst);
                 self.next.store(next, SeqCst);
                 (*next).prev.store(self_addr, SeqCst);
             }
@@ -110,20 +114,30 @@ struct PageFreeList {
 }
 
 impl PageFreeList {
-    fn new(num_pages: usize, grain: usize) -> PageFreeList {
-        PageFreeList {
+    fn new(num_pages: usize, grain: usize) -> Self {
+        Self {
             available: AtomicBitVec::new_in(num_pages >> grain, &BUMP_ALLOCATOR),
             pages: AtomicPtr::default(),
-            grain: grain,
+            grain,
         }
     }
 
+    #[allow(clippy::cast_ptr_alignment)]
     fn get_index(&self, page: *const PageLink) -> usize {
-        unsafe { page.offset_from(RAM_BASE as *const PageLink) as usize >> self.grain }
+        unsafe {
+            usize::try_from(page.offset_from(RAM_BASE as *const PageLink))
+                .expect("Tried to get index for pointer outside of RAM.")
+                >> self.grain
+        }
     }
 
+    #[allow(clippy::cast_ptr_alignment)]
     fn get_page(&self, index: usize) -> *mut PageLink {
-        unsafe { (RAM_BASE as *mut PageLink).offset((index << self.grain) as isize) }
+        unsafe {
+            RAM_BASE
+                .cast::<PageLink>()
+                .offset(isize::try_from(index << self.grain).expect("Index is out of isize range."))
+        }
     }
 
     fn allocate_page(&self) -> Option<*mut PageLink> {
@@ -147,12 +161,12 @@ impl PageFreeList {
 
     fn allocate_target_page(&self, page: *mut PageLink) {
         let index = self.get_index(page);
-        self.allocate_page_exact(index, page)
+        self.allocate_page_exact(index, page);
     }
 
     fn _allocate_target_page_from_index(&self, index: usize) {
         let page = self.get_page(index);
-        self.allocate_page_exact(index, page)
+        self.allocate_page_exact(index, page);
     }
 
     fn allocate_page_exact(&self, index: usize, page: *mut PageLink) {
@@ -185,7 +199,6 @@ impl PageFreeList {
         self.deallocate_page_exact(index, self.get_page(index))
     }
 
-    #[inline(always)]
     fn deallocate_page_exact(&self, index: usize, page: *mut PageLink) -> Option<*mut PageLink> {
         let buddy_index = index ^ 1;
         let lower_index = index & (!1);
@@ -196,7 +209,7 @@ impl PageFreeList {
             self.available.set(index, true);
             unsafe {
                 assert!(
-                    RAM_RANGE.contains(&(page as *mut u8)),
+                    RAM_RANGE.contains(&page.cast()),
                     "Bad page deallocation at {:#01x}",
                     page as usize
                 );
@@ -224,7 +237,11 @@ static BUMP_ALLOCATOR: BumpAllocator = BumpAllocator {
 };
 
 pub fn get_bump_addr() -> *const u8 {
-    unsafe { RAM_BASE.add(BUMP_ALLOCATOR.offset.load(SeqCst)) as *const u8 }
+    unsafe {
+        RAM_BASE
+            .add(BUMP_ALLOCATOR.offset.load(SeqCst))
+            .cast_const()
+    }
 }
 
 pub static PAGE_ALLOCATOR: Mutex<PageAllocator> = Mutex::new(PageAllocator {
@@ -283,17 +300,18 @@ impl PageAllocator {
 
     fn allocate_pages(&self, num_pages: usize) -> Result<*mut PageLink, PageAllocationError> {
         let mut grain = num_pages.ilog2() as usize;
-        grain = grain + (num_pages > (1 << grain)) as usize;
-        match self.grained_lists.get(grain) {
-            Some(free_list) => match free_list.allocate_page() {
-                Some(block) => Ok(block),
-                None => match self.split_block(grain) {
-                    Some(block) => Ok(block),
-                    None => Err(PageAllocationError::OutOfMemory),
-                },
-            },
-            None => Err(PageAllocationError::OutOfMemory),
-        }
+        grain = grain + usize::from(num_pages > (1 << grain));
+        self.grained_lists
+            .get(grain)
+            .map_or(Err(PageAllocationError::OutOfMemory), |free_list| {
+                free_list.allocate_page().map_or_else(
+                    || {
+                        self.split_block(grain)
+                            .ok_or(PageAllocationError::OutOfMemory)
+                    },
+                    Ok,
+                )
+            })
     }
 
     fn deallocate_page(
@@ -301,13 +319,15 @@ impl PageAllocator {
         page: *mut PageLink,
         grain: usize,
     ) -> Result<(), PageDeallocationError> {
-        match self.grained_lists.get(grain) {
-            Some(free_list) => match free_list.deallocate_page(page) {
-                Some(coalesced_block) => self.deallocate_page(coalesced_block, grain + 1),
-                None => Ok(()),
-            },
-            None => Err(PageDeallocationError::OutOfBounds),
-        }
+        self.grained_lists
+            .get(grain)
+            .map_or(Err(PageDeallocationError::OutOfBounds), |free_list| {
+                free_list
+                    .deallocate_page(page)
+                    .map_or(Ok(()), |coalesced_block| {
+                        self.deallocate_page(coalesced_block, grain + 1)
+                    })
+            })
     }
 
     fn deallocate_page_from_index(
@@ -315,16 +335,17 @@ impl PageAllocator {
         index: usize,
         grain: usize,
     ) -> Result<(), PageDeallocationError> {
-        match self.grained_lists.get(grain) {
-            Some(free_list) => match free_list.deallocate_page_from_index(index) {
-                Some(coalesced_block) => self.deallocate_page(coalesced_block, grain + 1),
-                None => Ok(()),
-            },
-            None => Err(PageDeallocationError::OutOfBounds),
-        }
+        self.grained_lists
+            .get(grain)
+            .map_or(Err(PageDeallocationError::OutOfBounds), |free_list| {
+                free_list
+                    .deallocate_page_from_index(index)
+                    .map_or(Ok(()), |coalesced_block| {
+                        self.deallocate_page(coalesced_block, grain + 1)
+                    })
+            })
     }
 
-    #[inline(always)]
     fn get_num_pages(layout: Layout) -> usize {
         layout.size().max(layout.align()).div_ceil(PAGE_SIZE)
     }
@@ -338,22 +359,24 @@ impl PageAllocator {
 unsafe impl Allocator for Mutex<PageAllocator> {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         let num_pages = PageAllocator::get_num_pages(layout);
-        match self.lock_blocking().allocate_pages(num_pages) {
-            Ok(block) => Ok(NonNull::new(slice_from_raw_parts_mut(
-                block as *mut u8,
-                num_pages * PAGE_SIZE,
-            ))
-            .expect("Allocated null pointer")),
-            Err(_) => Err(AllocError),
-        }
+        self.lock_blocking()
+            .allocate_pages(num_pages)
+            .map_or(Err(AllocError), |block| {
+                Ok(NonNull::new(slice_from_raw_parts_mut(
+                    block.cast(),
+                    num_pages * PAGE_SIZE,
+                ))
+                .expect("Allocated null pointer"))
+            })
     }
 
+    #[allow(clippy::cast_ptr_alignment)]
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         let num_pages = PageAllocator::get_num_pages(layout);
         let mut grain = num_pages.ilog2() as usize;
-        grain = grain + (num_pages > (1 << grain)) as usize;
+        grain = grain + usize::from(num_pages > (1 << grain));
         self.lock_blocking()
-            .deallocate_page(ptr.as_ptr() as *mut PageLink, grain)
+            .deallocate_page(ptr.as_ptr().cast::<PageLink>(), grain)
             .expect("Deallocating page failed!");
     }
 
@@ -400,11 +423,12 @@ pub struct SlabAllocator {
 
 impl SlabAllocator {
     fn get_slot_size(layout: Layout) -> u16 {
-        max(layout.size(), layout.align()).div_ceil(size_of::<FreeLink>()) as u16
+        u16::try_from(max(layout.size(), layout.align()).div_ceil(size_of::<FreeLink>()))
+            .expect("Layout size or alignment is too large for slab allocator.")
     }
 
     pub fn dump_slot(&self, slot_size: u16) -> Result<(), ()> {
-        for header in self.headers.iter() {
+        for header in &self.headers {
             println!("{:?}", header);
         }
         let key = self
@@ -417,7 +441,7 @@ impl SlabAllocator {
 }
 
 impl SlabHeader {
-    fn new(layout: Layout) -> SlabHeader {
+    fn new(layout: Layout) -> Self {
         let slot_size = SlabAllocator::get_slot_size(layout);
         assert!(slot_size > 0);
         let page_memory: Box<
@@ -439,16 +463,16 @@ impl SlabHeader {
                 - slot_size; // Fold returns next, so go "back" one
         page_memory[0].prev.store(last_index, SeqCst);
         page_memory[last_index as usize].next.store(0, SeqCst);
-        SlabHeader {
-            page_memory: page_memory,
-            slot_size: slot_size,
+        Self {
+            page_memory,
+            slot_size,
             in_use: 0,
             offset: Some(0),
         }
     }
 
     fn allocate(&mut self) -> Option<*mut u8> {
-        Some(self.allocate_at(self.offset?) as *mut u8)
+        Some(self.allocate_at(self.offset?).cast())
     }
 
     fn allocate_at(&mut self, index: u16) -> *mut FreeLink {
@@ -474,7 +498,7 @@ impl SlabHeader {
             next.prev.store(prev_index, SeqCst);
             self.offset = Some(next_index);
         }
-        assert!(self.owns(val_ptr as *mut u8));
+        assert!(self.owns(val_ptr.cast()));
         self.in_use += 1;
         val_ptr
     }
@@ -484,46 +508,46 @@ impl SlabHeader {
             (index % self.slot_size) == 0,
             "Deallocation index is not divisible by slot size!"
         );
-        match self.offset {
-            Some(prev_index) => {
-                let prev = self
-                    .page_memory
-                    .get_mut(prev_index as usize)
-                    .expect("Slab header stored invalid offset!");
-                let next_index = prev.next.swap(index, SeqCst);
-                let next = self
-                    .page_memory
-                    .get_mut(next_index as usize)
-                    .expect("Slab header stored invalid offset!");
-                next.prev.store(index, SeqCst);
-                let val = self
-                    .page_memory
-                    .get_mut(index as usize)
-                    .expect("Invalid offset when deallocating in slab!");
-                val.prev.store(prev_index, SeqCst);
-                val.next.store(next_index, SeqCst);
-            }
-            None => {
-                let val = self
-                    .page_memory
-                    .get_mut(index as usize)
-                    .expect("Invalid offset when deallocating in slab!");
-                val.prev.store(index, SeqCst);
-                val.next.store(index, SeqCst);
-                self.offset = Some(index);
-            }
+        if let Some(prev_index) = self.offset {
+            let prev = self
+                .page_memory
+                .get_mut(prev_index as usize)
+                .expect("Slab header stored invalid offset!");
+            let next_index = prev.next.swap(index, SeqCst);
+            let next = self
+                .page_memory
+                .get_mut(next_index as usize)
+                .expect("Slab header stored invalid offset!");
+            next.prev.store(index, SeqCst);
+            let val = self
+                .page_memory
+                .get_mut(index as usize)
+                .expect("Invalid offset when deallocating in slab!");
+            val.prev.store(prev_index, SeqCst);
+            val.next.store(next_index, SeqCst);
+        } else {
+            let val = self
+                .page_memory
+                .get_mut(index as usize)
+                .expect("Invalid offset when deallocating in slab!");
+            val.prev.store(index, SeqCst);
+            val.next.store(index, SeqCst);
+            self.offset = Some(index);
         }
         self.in_use -= 1;
     }
 
+    #[allow(clippy::cast_ptr_alignment)]
     fn deallocate(&mut self, memory: *mut u8) {
-        let link_ptr = memory as *mut FreeLink;
+        assert!(memory.is_aligned_to(align_of::<FreeLink>()));
+        let link_ptr = memory.cast::<FreeLink>();
         assert!(self.owns(memory), "Deallocated invalid memory!");
         let link_offset = unsafe { link_ptr.offset_from(self.page_memory.as_ptr()) };
         assert!(link_offset >= 0, "Deallocation index is out of bounds!");
-        self.deallocate_at(link_offset as u16);
+        self.deallocate_at(u16::try_from(link_offset).expect("Link offset is impossibly large."));
     }
 
+    #[allow(clippy::cast_ptr_alignment)]
     fn owns(&self, ptr: *mut u8) -> bool {
         self.page_memory
             .as_ptr_range()
@@ -560,6 +584,7 @@ unsafe impl GlobalAlloc for Mutex<SlabAllocator> {
         }
     }
 
+    #[allow(clippy::match_wild_err_arm)]
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         let mut allocator = self.lock_blocking_mut();
         let block_size = SlabAllocator::get_slot_size(layout);

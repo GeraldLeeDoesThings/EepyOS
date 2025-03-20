@@ -1,6 +1,11 @@
 [package]
 name = "eepy_os"
 version = "0.1.0"
+categories = ["embedded", "no-std", "os"]
+description = "An operation system for the Star64 single board computer"
+keywords = ["kernel", "os"]
+license = "AGPL-3.0-only"
+repository = "https://github.com/GeraldLeeDoesThings/EepyOS"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

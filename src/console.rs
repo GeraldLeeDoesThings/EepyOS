@@ -1,4 +1,4 @@
-use core::str::Split;
+use core::{mem::replace, str::Split};
 
 use alloc::{alloc::Global, boxed::Box};
 
@@ -20,6 +20,7 @@ static ALLOC_BUFFER: Mutex<[MaybeAlloc; ALLOC_BUFFER_MAX_LENGTH]> =
 static mut ALLOC_BUFFER_LENGTH: usize = 0;
 const ALLOC_BUFFER_MAX_LENGTH: usize = 32;
 
+#[allow(clippy::unnecessary_wraps)]
 fn exec_bumpa() -> Result<(), &'static str> {
     println!("Bump Addr: {:p}", get_bump_addr());
     Ok(())
@@ -34,7 +35,7 @@ fn exec_pagea(args: &mut Split<char>) -> Result<(), &'static str> {
     PAGE_ALLOCATOR
         .lock_blocking()
         .dump_at_grain(grain)
-        .map_err(|_| "Error while dumping page allocator memory")
+        .map_err(|()| "Error while dumping page allocator memory")
 }
 
 fn exec_slaba(args: &mut Split<char>) -> Result<(), &'static str> {
@@ -46,7 +47,7 @@ fn exec_slaba(args: &mut Split<char>) -> Result<(), &'static str> {
     SLAB_ALLOCATOR
         .lock_blocking()
         .dump_slot(block_size)
-        .map_err(|_| "Error while dumping slab allocator memory")
+        .map_err(|()| "Error while dumping slab allocator memory")
 }
 
 fn exec_alloc(args: &mut Split<char>) -> Result<(), &'static str> {
@@ -65,22 +66,19 @@ fn exec_alloc(args: &mut Split<char>) -> Result<(), &'static str> {
                     .map_err(|_| "Argument for 'index' is not a valid usize")
             },
         )?;
-        if let Some(val) = allocator.get(index) {
-            match val {
-                MaybeAlloc::None => {
-                    *allocator.get_mut(index).unwrap() = MaybeAlloc::SlabAlloc(
-                        Box::new_uninit_slice(block_size as usize).assume_init(),
-                    );
-                    if index >= ALLOC_BUFFER_LENGTH {
-                        ALLOC_BUFFER_LENGTH = index + 1;
-                    }
-                    Ok(())
+        allocator.get_mut(index).map_or(Ok(()), |val| match val {
+            MaybeAlloc::None => {
+                let _ = replace(
+                    val,
+                    MaybeAlloc::SlabAlloc(Box::new_uninit_slice(block_size as usize).assume_init()),
+                );
+                if index >= ALLOC_BUFFER_LENGTH {
+                    ALLOC_BUFFER_LENGTH = index + 1;
                 }
-                _ => Err("Failed to allocate with global allocator"),
+                Ok(())
             }
-        } else {
-            Ok(())
-        }
+            _ => Err("Failed to allocate with global allocator"),
+        })
     }
 }
 
@@ -100,26 +98,25 @@ fn exec_palloc(args: &mut Split<char>) -> Result<(), &'static str> {
                     .map_err(|_| "Argument for 'index' is not a valid usize")
             },
         )?;
-        if let Some(val) = allocator.get(index) {
-            match val {
-                MaybeAlloc::None => {
-                    *allocator.get_mut(index).unwrap() = MaybeAlloc::PageAlloc(
+        allocator.get_mut(index).map_or(Ok(()), |val| match val {
+            MaybeAlloc::None => {
+                let _ = replace(
+                    val,
+                    MaybeAlloc::PageAlloc(
                         Box::new_uninit_slice_in(
                             (num_pages - 1) as usize * PAGE_SIZE + 1,
                             &PAGE_ALLOCATOR,
                         )
                         .assume_init(),
-                    );
-                    if index >= ALLOC_BUFFER_LENGTH {
-                        ALLOC_BUFFER_LENGTH = index + 1;
-                    }
-                    Ok(())
+                    ),
+                );
+                if index >= ALLOC_BUFFER_LENGTH {
+                    ALLOC_BUFFER_LENGTH = index + 1;
                 }
-                _ => Err("Slot at index is already allocated"),
+                Ok(())
             }
-        } else {
-            Ok(())
-        }
+            _ => Err("Slot at index is already allocated"),
+        })
     }
 }
 
@@ -127,27 +124,33 @@ fn exec_dealloc(args: &mut Split<char>) -> Result<(), &'static str> {
     let mut allocator = ALLOC_BUFFER.lock_mut().unwrap();
     unsafe {
         let index: usize = args.next().map_or_else(
-            || Ok(ALLOC_BUFFER_LENGTH),
+            || {
+                if ALLOC_BUFFER_LENGTH == 0 {
+                    Err("Alloc buffer is empty!")
+                } else {
+                    ALLOC_BUFFER_LENGTH -= 1;
+                    Ok(ALLOC_BUFFER_LENGTH)
+                }
+            },
             |index_str| {
                 index_str
                     .parse()
                     .map_err(|_| "Argument for 'index' is not a valid usize")
             },
         )?;
-        if let Some(val) = allocator.get_mut(index) {
-            match val {
-                MaybeAlloc::None => Err("Slot at index is already deallocated"),
-                _ => {
+        allocator
+            .get_mut(index)
+            .map_or(Err("Index is out of bounds"), |val| {
+                if matches!(val, MaybeAlloc::None) {
+                    Err("Slot at index is already deallocated")
+                } else {
                     *val = MaybeAlloc::None;
                     if index == ALLOC_BUFFER_LENGTH - 1 {
                         ALLOC_BUFFER_LENGTH -= 1;
                     }
                     Ok(())
                 }
-            }
-        } else {
-            Err("Index is out of bounds")
-        }
+            })
     }
 }
 

@@ -7,19 +7,19 @@ use crate::{
     thread::{ThreadActivationResult, ThreadHandle},
 };
 
-pub const INSTUCTION_ADDRESS_MISALIGNED: u64 = 0;
-pub const INSTRUCTION_ACCESS_FAULT: u64 = 1;
-pub const ILLEGAL_INSTRUCTION: u64 = 2;
-pub const BREAKPOINT: u64 = 3;
-pub const LOAD_ADDRESS_MISALIGNED: u64 = 4;
-pub const LOAD_ACCESS_FAULT: u64 = 5;
-pub const STORE_AMO_ADDRESS_MISALIGNED: u64 = 6;
-pub const STORE_AMO_ACCESS_FAULT: u64 = 7;
-pub const USER_ENVIRONMENT_CALL: u64 = 8;
-pub const SUPERVISOR_ENVIRONMENT_CALL: u64 = 9;
-pub const INSTRUCTION_PAGE_FAULT: u64 = 12;
-pub const LOAD_PAGE_FAULT: u64 = 13;
-pub const STORE_AMO_PAGE_FAULT: u64 = 15;
+pub const INSTUCTION_ADDRESS_MISALIGNED: usize = 0;
+pub const INSTRUCTION_ACCESS_FAULT: usize = 1;
+pub const ILLEGAL_INSTRUCTION: usize = 2;
+pub const BREAKPOINT: usize = 3;
+pub const LOAD_ADDRESS_MISALIGNED: usize = 4;
+pub const LOAD_ACCESS_FAULT: usize = 5;
+pub const STORE_AMO_ADDRESS_MISALIGNED: usize = 6;
+pub const STORE_AMO_ACCESS_FAULT: usize = 7;
+pub const USER_ENVIRONMENT_CALL: usize = 8;
+pub const SUPERVISOR_ENVIRONMENT_CALL: usize = 9;
+pub const INSTRUCTION_PAGE_FAULT: usize = 12;
+pub const LOAD_PAGE_FAULT: usize = 13;
+pub const STORE_AMO_PAGE_FAULT: usize = 15;
 
 extern "C" {
     pub fn init_exception_handler();

@@ -1,4 +1,5 @@
 use crate::{
+    context::{activate_context, ActivationResult, RegisterContext},
     println,
     resource::Resource,
     sync::{Mutex, MutexGuardMut, MutexLockError},
@@ -6,8 +7,6 @@ use crate::{
     time::set_timecmp_delay_ms,
 };
 use core::{error::Error, fmt::Display, ptr::addr_of};
-
-use super::context::{activate_context, ActivationResult, RegisterContext};
 
 #[derive(Clone, Copy, Debug)]
 pub enum ThreadState {
@@ -19,7 +18,7 @@ pub enum ThreadState {
 
 pub struct ThreadControlBlock {
     registers: RegisterContext,
-    pc: u64,
+    pc: usize,
     state: ThreadState,
     id: u16,
     priority: u16,
@@ -30,7 +29,7 @@ pub struct ThreadControlBlock {
 
 pub struct ThreadActivationResult<'a> {
     pub thread: &'a mut ThreadControlBlock,
-    pub cause: u64,
+    pub cause: usize,
 }
 
 pub struct ThreadHandle<'a> {
@@ -52,10 +51,10 @@ pub enum ThreadResolveInterruptError {
 impl Display for ThreadState {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            ThreadState::Interrupted => write!(f, "Interrupted"),
-            ThreadState::Running => write!(f, "Running"),
-            ThreadState::Ready => write!(f, "Ready"),
-            ThreadState::Zombie => write!(f, "Zombie"),
+            Self::Interrupted => write!(f, "Interrupted"),
+            Self::Running => write!(f, "Running"),
+            Self::Ready => write!(f, "Ready"),
+            Self::Zombie => write!(f, "Zombie"),
         }
     }
 }
@@ -63,11 +62,10 @@ impl Display for ThreadState {
 impl Display for ThreadActivationError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::FailedToClaim(err) => write!(f, "Error while claiming thread:\n{}", err),
+            Self::FailedToClaim(err) => write!(f, "Error while claiming thread:\n{err}"),
             Self::ThreadNotReady(state) => write!(
                 f,
-                "Thread state must be 'Ready', but the state is '{}'.",
-                state
+                "Thread state must be 'Ready', but the state is '{state}'."
             ),
         }
     }
@@ -78,13 +76,13 @@ impl Display for ThreadResolveInterruptError {
         match self {
             Self::ThreadNotInterrupted(state) => write!(
                 f,
-                "Thread state must be 'Interrupted', but the state is '{}'.",
-                state
+                "Thread state must be 'Interrupted', but the state is '{state}'."
             ),
         }
     }
 }
 
+#[allow(clippy::match_wildcard_for_single_variants)]
 impl Error for ThreadActivationError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
@@ -93,7 +91,7 @@ impl Error for ThreadActivationError {
         }
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "description() is deprecated; use Display"
     }
 
@@ -112,8 +110,8 @@ pub enum ThreadHandleClaimError {
 impl Display for ThreadHandleClaimError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            ThreadHandleClaimError::HandleAlreadyClaimed(reason) => {
-                write!(f, "Thread handle is already claimed: {}", reason)
+            Self::HandleAlreadyClaimed(reason) => {
+                write!(f, "Thread handle is already claimed: {reason}")
             }
         }
     }
@@ -124,7 +122,7 @@ impl Error for ThreadHandleClaimError {
         None
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "description() is deprecated; use Display"
     }
 
@@ -141,15 +139,13 @@ pub struct CandidateThread<'a> {
 }
 
 impl<'a> CandidateThread<'a> {
-    pub fn new(best: u32, handle: Option<ThreadHandle<'a>>) -> CandidateThread<'a> {
-        CandidateThread {
-            best: best,
-            handle: handle,
-        }
+    pub const fn new(best: u32, handle: Option<ThreadHandle<'a>>) -> Self {
+        CandidateThread { best, handle }
     }
 }
 
-impl<'a> Default for CandidateThread<'a> {
+#[allow(clippy::derivable_impls)]
+impl Default for CandidateThread<'_> {
     fn default() -> Self {
         Self {
             best: 0,
@@ -158,49 +154,52 @@ impl<'a> Default for CandidateThread<'a> {
     }
 }
 
-impl<'a> ThreadControlBlock {
+impl ThreadControlBlock {
     pub fn new(
-        code: extern "C" fn() -> u64,
+        code: extern "C" fn() -> usize,
         id: u16,
         priority: u16,
-        stack_base: u64,
+        stack_base: usize,
         owning_process_id: u16,
-    ) -> ThreadControlBlock {
-        let mut tcb = ThreadControlBlock {
+    ) -> Self {
+        let mut tcb = Self {
             registers: RegisterContext::all_zero(),
-            pc: code as u64,
+            pc: code as usize,
             state: ThreadState::Ready,
-            id: id,
-            priority: priority,
-            need: priority as u32,
-            owning_process_id: owning_process_id,
+            id,
+            priority,
+            need: u32::from(priority),
+            owning_process_id,
             handle_lock: Mutex::new(()),
         };
         tcb.registers.sp = stack_base;
-        tcb.registers.ra = exit as u64;
+        tcb.registers.ra = exit as usize;
         tcb
     }
 
     pub fn get_handle(&mut self) -> Result<ThreadHandle<'_>, ThreadHandleClaimError> {
-        let t: *mut ThreadControlBlock = self;
+        let t: *mut Self = self;
         match self.handle_lock.lock_mut() {
             Ok(handle) => Ok(ThreadHandle {
                 _guard: handle,
                 thread: t,
             }),
-            Err(mutex_err) => return Err(ThreadHandleClaimError::HandleAlreadyClaimed(mutex_err)),
+            Err(mutex_err) => Err(ThreadHandleClaimError::HandleAlreadyClaimed(mutex_err)),
         }
     }
 
-    fn activate(&mut self, hart_id: u64) -> Result<ThreadActivationResult, ThreadActivationError> {
+    fn activate(
+        &mut self,
+        hart_id: usize,
+    ) -> Result<ThreadActivationResult, ThreadActivationError> {
         match self.state {
             ThreadState::Ready => {
-                self.need = self.priority as u32;
+                self.need = u32::from(self.priority);
                 self.state = ThreadState::Running;
                 unsafe {
                     set_timecmp_delay_ms(1000);
                     let result: ActivationResult =
-                        activate_context(self.pc, addr_of!(self.registers) as u64, hart_id);
+                        activate_context(self.pc, addr_of!(self.registers) as usize, hart_id);
                     self.pc = result.pc;
                     self.state = ThreadState::Interrupted;
                     Ok(ThreadActivationResult {
@@ -213,7 +212,7 @@ impl<'a> ThreadControlBlock {
         }
     }
 
-    fn consider(&mut self, best: u32) -> Option<u32> {
+    const fn consider(&mut self, best: u32) -> Option<u32> {
         match self.state {
             ThreadState::Ready => {
                 self.need += self.priority as u32;
@@ -227,15 +226,15 @@ impl<'a> ThreadControlBlock {
         }
     }
 
-    pub fn get_args(&self) -> [u64; 2] {
+    pub const fn get_args(&self) -> [usize; 2] {
         [self.registers.a0, self.registers.a1]
     }
 
-    fn set_return_val(&mut self, val: u64) {
+    const fn set_return_val(&mut self, val: usize) {
         self.registers.a0 = val;
     }
 
-    pub fn get_need(&self) -> u32 {
+    pub const fn get_need(&self) -> u32 {
         self.need
     }
 
@@ -253,7 +252,10 @@ impl<'a> ThreadControlBlock {
         }
     }
 
-    fn resolve_interrupt(&mut self, synchronous: bool) -> Result<(), ThreadResolveInterruptError> {
+    const fn resolve_interrupt(
+        &mut self,
+        synchronous: bool,
+    ) -> Result<(), ThreadResolveInterruptError> {
         match self.state {
             ThreadState::Interrupted => {
                 self.state = ThreadState::Ready;
@@ -269,8 +271,11 @@ impl<'a> ThreadControlBlock {
     }
 }
 
-impl<'a> ThreadHandle<'a> {
-    pub fn activate(&self, hart_id: u64) -> Result<ThreadActivationResult, ThreadActivationError> {
+impl ThreadHandle<'_> {
+    pub fn activate(
+        &self,
+        hart_id: usize,
+    ) -> Result<ThreadActivationResult, ThreadActivationError> {
         unsafe {
             assert!((*self.thread).handle_lock.is_held());
             (*self.thread).activate(hart_id)
@@ -284,17 +289,17 @@ impl<'a> ThreadHandle<'a> {
         }
     }
 
-    pub fn set_return_val(&self, val: u64) {
+    pub fn set_return_val(&self, val: usize) {
         unsafe {
             assert!((*self.thread).handle_lock.is_held());
-            (*self.thread).set_return_val(val)
+            (*self.thread).set_return_val(val);
         }
     }
 
     pub fn kill(&self) {
         unsafe {
             assert!((*self.thread).handle_lock.is_held());
-            (*self.thread).kill()
+            (*self.thread).kill();
         }
     }
 
@@ -306,24 +311,16 @@ impl<'a> ThreadHandle<'a> {
     }
 
     pub fn resolve_interrupt_or_kill(&self, synchronous: bool) {
-        match self.resolve_interrupt(synchronous) {
-            Ok(_) => {}
-            Err(_) => {
-                self.kill();
-                println!("Mismatched thread state! Killing thread.")
-            }
+        if self.resolve_interrupt(synchronous).is_err() {
+            self.kill();
+            println!("Mismatched thread state! Killing thread.");
         }
     }
 }
 
 impl Resource for Option<ThreadControlBlock> {
     fn exhausted(&self) -> bool {
-        match self {
-            None => true,
-            Some(thread) => match thread.state {
-                ThreadState::Zombie => true,
-                _ => false,
-            },
-        }
+        self.as_ref()
+            .is_none_or(|thread| matches!(thread.state, ThreadState::Zombie))
     }
 }

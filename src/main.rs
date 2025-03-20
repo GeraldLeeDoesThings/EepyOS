@@ -8,9 +8,11 @@
 #![feature(impl_trait_in_assoc_type)]
 #![feature(new_range_api)]
 #![feature(new_zeroed_alloc)]
+#![feature(pointer_is_aligned_to)]
 #![feature(slice_ptr_get)]
 #![feature(vec_push_within_capacity)]
-#![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
+
+#![warn(clippy::all, clippy::nursery, clippy::pedantic, clippy::cargo)]
 
 mod console;
 mod consts;
@@ -58,7 +60,7 @@ static PROCESS_TABLE: Mutex<ResourceManager<Option<ProcessControlBlock>, MAX_PRO
 
 #[no_mangle]
 #[allow(dead_code)]
-extern "C" fn kmain(hart_id: u64, _dtb: *const u8) -> ! {
+extern "C" fn kmain(hart_id: usize, _dtb: *const u8) -> ! {
     unsafe {
         asm!(
             "mv {0}, ra",
@@ -82,9 +84,9 @@ extern "C" fn kmain(hart_id: u64, _dtb: *const u8) -> ! {
                     .claim_first(Some(pcb))
                     .is_ok()
                 {
-                    println!("Process spawned successfully!")
+                    println!("Process spawned successfully!");
                 } else {
-                    println!("Process spawned with unexpected ID")
+                    println!("Process spawned with unexpected ID");
                 }
             }
             Err(_) => println!("Failed to spawn a process!"),
@@ -170,25 +172,26 @@ extern "C" fn kmain(hart_id: u64, _dtb: *const u8) -> ! {
     }
 }
 
-extern "C" fn test() -> u64 {
+extern "C" fn test() -> usize {
     // TODO: Move elsewhere
     println!("Hello world!");
-    return 0;
+    0
 }
 
-extern "C" fn test2() -> u64 {
+extern "C" fn test2() -> usize {
     // TODO: Move elsewhere
     println!("Hello from another process!");
-    return 0;
+    0
 }
 
-#[allow(unused)]
-extern "C" fn test3() -> u64 {
+#[allow(clippy::empty_loop, clippy::infinite_loop, unused)]
+extern "C" fn test3() -> usize {
     // TODO: Move elsewhere
     println!("Looping forever... (in userspace)");
     loop {}
 }
 
+#[allow(clippy::no_mangle_with_rust_abi)]
 #[no_mangle]
 #[panic_handler]
 unsafe fn panic(info: &PanicInfo) -> ! {

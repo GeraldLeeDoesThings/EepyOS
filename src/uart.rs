@@ -60,18 +60,17 @@ impl Write for UartHandler {
 }
 
 impl UartHandler {
-    pub fn new(base: u64) -> UartHandler {
+    pub const fn new(base: u64) -> Self {
         let base_ptr = base as *const u8;
         unsafe {
-            let handler = UartHandler {
-                rbr: base_ptr.byte_offset(RBR_OFFSET) as *const u8,
-                thr: base_ptr.byte_offset(THR_OFFSET) as *mut u8,
-                _lcr: base_ptr.byte_offset(LCR_OFFSET) as *mut u8,
-                lsr: base_ptr.byte_offset(LSR_OFFSET) as *const u8,
-            };
             // handler.lcr.write_volatile(0x00000003); // Set word length
             // handler.fcr.write_volatile(0x00000001); // Enable FIFO
-            handler
+            Self {
+                rbr: base_ptr.byte_offset(RBR_OFFSET).cast(),
+                thr: base_ptr.byte_offset(THR_OFFSET).cast_mut(),
+                _lcr: base_ptr.byte_offset(LCR_OFFSET).cast_mut(),
+                lsr: base_ptr.byte_offset(LSR_OFFSET).cast(),
+            }
         }
     }
 }
@@ -80,7 +79,7 @@ impl UartHandler {
 macro_rules! print {
     ($($args:tt)+) => ({
         use core::fmt::Write;
-        use crate::uart::{UART0_BASE, UartHandler};
+        use $crate::uart::{UART0_BASE, UartHandler};
         let mut uart_out = UartHandler::new(UART0_BASE);
         let _ = write!(&mut uart_out, $($args)+);
     });
