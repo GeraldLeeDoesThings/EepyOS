@@ -2,24 +2,31 @@ use core::arch::global_asm;
 
 use crate::thread::{ThreadActivationResult, ThreadHandle};
 
+/// Never schedule this thread again.
 pub const EXIT: usize = 0;
+/// Schedule another thread (if possible).
 pub const YIELD: usize = 1;
 
+/// Calls the exit syscall. See [`EXIT`].
 #[no_mangle]
 pub extern "C" fn exit(status: usize) -> ! {
+    // SAFETY: asm wrapper.
     unsafe {
         syscall_1a(EXIT, status);
     }
     unreachable!("Execution survived exiting.")
 }
 
+/// Calls the yield syscall. See [`YIELD`].
 #[no_mangle]
 pub extern "C" fn p_yield() {
+    // SAFETY: asm wrapper.
     unsafe {
         syscall(YIELD);
     }
 }
 
+/// Handles an incoming syscall.
 pub fn handle_syscall(
     activation: &ThreadActivationResult,
     handle: &ThreadHandle,
@@ -34,7 +41,7 @@ pub fn handle_syscall(
     }
 }
 
-#[allow(unused)]
+#[allow(unused, reason = "All will be used eventually.")]
 extern "C" {
     pub fn syscall(code: usize) -> isize;
     pub fn syscall_1a(code: usize, arg1: usize) -> isize;

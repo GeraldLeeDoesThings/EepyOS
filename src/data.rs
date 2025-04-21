@@ -8,12 +8,19 @@ use core::{
     },
 };
 
+/// A fixed length vector of packed bits. The bits are represented in usizes.
+/// Updates are all atomic, so shared access is possible.
 pub struct AtomicBitVec<A: Allocator = Global> {
+    /// Heap memory to store bits.
     inner: Box<[AtomicUsize], A>,
+    /// Length of the vector. This length is enforced even if more bits are
+    /// allocated.
     length: usize,
 }
 
 impl<A: Allocator> AtomicBitVec<A> {
+    /// Creates a new atomic bit vec storing `size` bits with using `allocator`
+    /// to reserve memory.
     pub fn new_in(size: usize, allocator: A) -> Self {
         let num_elems = size.div_ceil(usize::BITS as usize);
         let mut inner = Vec::with_capacity_in(num_elems, allocator);
@@ -29,6 +36,8 @@ impl<A: Allocator> AtomicBitVec<A> {
         }
     }
 
+    /// Obtains the bit corresonding to `index`, or `None` if the index is out
+    /// of bounds.
     pub fn get(&self, index: usize) -> Option<bool> {
         if index >= self.length {
             return None;
@@ -39,6 +48,8 @@ impl<A: Allocator> AtomicBitVec<A> {
         Some(packed & (1 << inner_offset) > 0)
     }
 
+    /// Sets the bit corresonding to `index`, or `None` if the index is out of
+    /// bounds. Returns the new value at `index`, if it was set.
     pub fn set(&self, index: usize, val: bool) -> Option<bool> {
         if index >= self.length {
             return None;
@@ -57,6 +68,8 @@ impl<A: Allocator> AtomicBitVec<A> {
         Some(val)
     }
 
+    /// Finds the first instance of false in the bit vec, or `None` if the
+    /// entire bit vec is true.
     pub fn _find_false(&self) -> Option<usize> {
         for (index, val) in self.inner.iter().enumerate() {
             let packed = val.load(Acquire);
@@ -67,6 +80,8 @@ impl<A: Allocator> AtomicBitVec<A> {
         None
     }
 
+    /// Sets all indices from `lo_index` to `hi_index` to val, or `None` if
+    /// `lo_index` > `hi_index`.
     pub fn _bulk_write(&self, lo_index: usize, hi_index: usize, val: bool) -> Option<usize> {
         fn generate_op(lo: usize, hi: usize, val: bool) -> usize {
             assert!(lo <= hi);
@@ -85,7 +100,9 @@ impl<A: Allocator> AtomicBitVec<A> {
             }
         }
 
-        assert!(lo_index <= hi_index);
+        if lo_index > hi_index {
+            return None;
+        }
         let lo_inner_index = lo_index / usize::BITS as usize;
         let lo_inner_offset = lo_index % usize::BITS as usize;
         let hi_inner_index = hi_index / usize::BITS as usize;
@@ -143,6 +160,7 @@ impl<A: Allocator> AtomicBitVec<A> {
         }
     }
 
+    /// Returns the length of this bit vec.
     pub const fn _len(&self) -> usize {
         self.length
     }

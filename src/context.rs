@@ -1,7 +1,12 @@
 use core::arch::global_asm;
 
+/// Registers for a thread. Used as the memory layout for trap frames.
 #[repr(C, align(8))]
 #[derive(Clone, Copy)]
+#[allow(
+    clippy::missing_docs_in_private_items,
+    reason = "Register names are self descriptive"
+)]
 pub struct RegisterContext {
     pub ra: usize,
     pub sp: usize,
@@ -68,14 +73,18 @@ pub struct RegisterContext {
     pub ft11: usize,
 }
 
+/// The result of activating (running) a thread.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ActivationResult {
+    /// The program counter when trapping (sepc).
     pub pc: usize,
+    /// The trap cause (scause).
     pub cause: usize,
 }
 
 impl RegisterContext {
+    /// Constructs a register context with all registers set to zero.
     pub const fn all_zero() -> Self {
         Self {
             ra: 0,
